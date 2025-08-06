@@ -66,11 +66,12 @@ class ETFRecommendationEngine:
                     '안내': f"현재 선택하신 투자 레벨(Level {user_level})에 적합한 ETF가 없습니다.\n\n- 투자 레벨을 변경해서 다시 시도해보시거나,\n- 카테고리 키워드를 바꿔서 검색해보세요.\n\n(일부 테마/섹터 ETF는 초보자에게 추천되지 않을 수 있습니다.)"
                 }]
 
-            # 3단계: WMTI 기반 점수 계산 및 정렬
+            # 3단계: WMTI 투자자 유형별 점수 계산 및 정렬
             scored_etfs = self._calculate_wmti_scores(filtered, user_profile)
             top_etfs = scored_etfs.head(top_n)
             
-            logger.info(f"WMTI 기반 추천 완료: {len(top_etfs)}개 ETF")
+            wmti_type = user_profile.get('wmti_type', 'ABWC')
+            logger.info(f"WMTI {wmti_type} 유형 기반 추천 완료: {len(top_etfs)}개 ETF")
             return top_etfs.to_dict('records')
         
         except Exception as e:
@@ -93,8 +94,8 @@ class ETFRecommendationEngine:
         if not category_keyword.strip():
             return cache_df
         
-        # ETF명, 분류체계, 기초지수에서 키워드 검색
-        search_columns = ['ETF명', '분류체계', '기초지수']
+        # 종목명, 분류체계, 기초지수에서 키워드 검색
+        search_columns = ['종목명', 'ETF명', '분류체계', '기초지수']
         filtered = filter_dataframe_by_keyword(cache_df, category_keyword, search_columns)
         
         logger.info(f"카테고리 '{category_keyword}' 필터링: {len(cache_df)} → {len(filtered)}")
@@ -147,7 +148,7 @@ class ETFRecommendationEngine:
 
     def _calculate_wmti_scores(self, filtered_df: pd.DataFrame, user_profile: Dict[str, Any]) -> pd.DataFrame:
         """
-        WMTI 기반 객관적 점수 계산
+        WMTI 투자자 유형별 점수 활용
         
         Args:
             filtered_df: 필터링된 ETF 데이터
@@ -157,29 +158,43 @@ class ETFRecommendationEngine:
             점수가 계산된 DataFrame
         """
         df = filtered_df.copy()
-        wmti_type = user_profile.get('wmti_type', 'BALANCED')
-        wmti_weights = self.config.get_wmti_weights(wmti_type)
+        wmti_type = user_profile.get('wmti_type', 'ABWC')  # 기본값: 균형형
         
-        # 객관적 지표 점수 계산
-        df['return_score'] = df.apply(lambda row: self._calculate_return_score(row), axis=1)
-        df['risk_adjusted_score'] = df.apply(lambda row: self._calculate_risk_adjusted_score(row), axis=1)
-        df['cost_efficiency_score'] = df.apply(lambda row: self._calculate_cost_efficiency_score(row), axis=1)
-        df['liquidity_score'] = df.apply(lambda row: self._calculate_liquidity_score(row), axis=1)
-        df['stability_score'] = df.apply(lambda row: self._calculate_stability_score(row), axis=1)
+        # 해당 투자자 유형의 점수 컬럼명
+        score_column = f'score_{wmti_type}'
         
-        # WMTI 가중치 적용 (안정성은 자산규모 기반으로 변경)
-        df['final_score'] = (
-            df['return_score'] * wmti_weights.get('return_weight', 0.3) +
-            df['risk_adjusted_score'] * 0.25 +
-            df['cost_efficiency_score'] * 0.20 +
-            df['liquidity_score'] * 0.15 +
-            df['stability_score'] * 0.10
-        )
+        # 캐시에서 해당 투자자 유형의 점수 사용
+        if score_column in df.columns:
+            df['final_score'] = df[score_column]
+            logger.info(f"캐시의 {wmti_type} 투자자 유형 점수 사용")
+        else:
+            # 해당 유형의 점수가 없는 경우 기본 점수 사용
+            if 'total_score' in df.columns:
+                df['final_score'] = df['total_score']
+                logger.info(f"{wmti_type} 점수 없음, 기본 total_score 사용")
+            else:
+                # 개별 점수들로 계산
+                df['return_score'] = df.apply(lambda row: self._calculate_return_score(row), axis=1)
+                df['risk_adjusted_score'] = df.apply(lambda row: self._calculate_risk_adjusted_score(row), axis=1)
+                df['cost_efficiency_score'] = df.apply(lambda row: self._calculate_cost_efficiency_score(row), axis=1)
+                df['liquidity_score'] = df.apply(lambda row: self._calculate_liquidity_score(row), axis=1)
+                df['stability_score'] = df.apply(lambda row: self._calculate_stability_score(row), axis=1)
+                
+                # WMTI 가중치 적용
+                wmti_weights = self.config.get_wmti_weights(wmti_type)
+                df['final_score'] = (
+                    df['return_score'] * wmti_weights.get('return_weight', 0.3) +
+                    df['risk_adjusted_score'] * wmti_weights.get('risk_adjusted_return_weight', 0.25) +
+                    df['cost_efficiency_score'] * wmti_weights.get('cost_efficiency_weight', 0.2) +
+                    df['liquidity_score'] * wmti_weights.get('liquidity_weight', 0.15) +
+                    df['stability_score'] * wmti_weights.get('stability_weight', 0.1)
+                )
+                logger.info(f"개별 점수로 {wmti_type} 유형 점수 계산")
         
         # 점수 기준 내림차순 정렬
         scored_etfs = df.sort_values('final_score', ascending=False, na_position='last')
         
-        logger.info(f"WMTI 점수 계산 완료: {wmti_type} 유형, {len(scored_etfs)}개 ETF")
+        logger.info(f"WMTI {wmti_type} 유형 점수 계산 완료: {len(scored_etfs)}개 ETF")
         return scored_etfs
 
     def _calculate_return_score(self, row: pd.Series) -> float:

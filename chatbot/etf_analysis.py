@@ -13,9 +13,10 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 from typing import Dict, List, Any, Tuple, Optional
 import warnings
+import logging
 warnings.filterwarnings('ignore')
 
-from .config import Config, LEVEL_PROMPTS
+from .config import Config
 
 # 공통 유틸리티 임포트
 from .utils import (
@@ -371,6 +372,9 @@ def plot_etf_summary_bar(etf_info: Dict[str, Any]) -> go.Figure:
         if avg_volume is not None:
             chart_data.append(('평균 거래량(천주)', avg_volume / 1000, '#d62728'))
         
+        # 디버깅: 데이터 확인
+        logger.info(f"차트 데이터: {chart_data}")
+        
         # 차트 생성
         fig = go.Figure()
         
@@ -388,6 +392,24 @@ def plot_etf_summary_bar(etf_info: Dict[str, Any]) -> go.Figure:
                 textposition='outside',
                 hovertemplate='%{x}: <b>%{y:,.2f}</b><extra></extra>'
             ))
+            
+            # Y축 범위 설정 (데이터에 따라 동적 조정)
+            max_val = max(values) if values else 1
+            y_range = [0, max_val * 1.2] if max_val > 0 else [0, 1]
+            
+            fig.update_layout(
+                title=f"{etf_info.get('ETF명', 'ETF')} 공식 데이터 요약",
+                xaxis_title="공식 지표",
+                yaxis_title="값",
+                yaxis=dict(range=y_range),
+                template="plotly_white",
+                font=dict(size=14, family="Pretendard, NanumGothic, Arial"),
+                plot_bgcolor="#F8F9FA",
+                paper_bgcolor="#F8F9FA",
+                height=450,
+                margin=dict(l=50, r=50, t=80, b=50),
+                showlegend=False
+            )
         else:
             # 데이터가 없는 경우
             fig.add_annotation(
@@ -397,20 +419,13 @@ def plot_etf_summary_bar(etf_info: Dict[str, Any]) -> go.Figure:
                 showarrow=False,
                 font=dict(size=16, color="gray")
             )
-        
-        # 레이아웃 설정
-        fig.update_layout(
-            title=f"{etf_info.get('ETF명', 'ETF')} 공식 데이터 요약",
-            xaxis_title="공식 지표",
-            yaxis_title="값",
-            template="plotly_white",
-            font=dict(size=14, family="Pretendard, NanumGothic, Arial"),
-            plot_bgcolor="#F8F9FA",
-            paper_bgcolor="#F8F9FA",
-            height=450,
-            margin=dict(l=50, r=50, t=80, b=50),
-            showlegend=False
-        )
+            
+            fig.update_layout(
+                title=f"{etf_info.get('ETF명', 'ETF')} 공식 데이터 요약",
+                template="plotly_white",
+                height=450,
+                margin=dict(l=50, r=50, t=80, b=50)
+            )
         
         return fig
         

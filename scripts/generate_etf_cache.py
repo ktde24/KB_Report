@@ -1,5 +1,5 @@
 """
-ETF 캐시 데이터 생성 스크립트 (WMTI 기반)
+ETF 캐시 데이터 생성 스크립트 (WMTI 투자자 유형별)
 - 객관적 데이터 기반 ETF 점수 계산
 - WMTI 투자자 유형별 가중치 적용
 - 캐시 파일 생성
@@ -46,9 +46,10 @@ class ETFCacheGenerator:
             etf_performance = self._load_etf_performance()
             etf_aum = self._load_etf_aum()
             etf_risk = self._load_etf_risk()
+            risk_tier_data = self._load_risk_tier_data()
             
             # 2. 데이터 통합
-            merged_data = self._merge_data(etf_info, etf_performance, etf_aum, etf_risk)
+            merged_data = self._merge_data(etf_info, etf_performance, etf_aum, etf_risk, risk_tier_data)
             
             # 3. 객관적 점수 계산
             scored_data = self._calculate_objective_scores(merged_data)
@@ -67,9 +68,17 @@ class ETFCacheGenerator:
         """ETF 기본 정보 로드"""
         try:
             file_path = self.data_paths['etf_info']
-            df = pd.read_csv(file_path, encoding='utf-8-sig')
-            logger.info(f"ETF 기본 정보 로드: {len(df)}개")
-            return df
+            # 상품검색.csv 인코딩
+            for encoding in ['utf-8', 'cp949', 'euc-kr', 'latin1']:
+                try:
+                    df = pd.read_csv(file_path, encoding=encoding)
+                    logger.info(f"ETF 기본 정보 로드: {len(df)}개 (인코딩: {encoding})")
+                    return df
+                except:
+                    continue
+            
+            logger.error(f"ETF 기본 정보 로드 실패: 모든 인코딩 시도 실패")
+            return pd.DataFrame()
         except Exception as e:
             logger.error(f"ETF 기본 정보 로드 실패: {e}")
             return pd.DataFrame()
@@ -78,7 +87,7 @@ class ETFCacheGenerator:
         """ETF 성과 데이터 로드"""
         try:
             file_path = self.data_paths['etf_performance']
-            df = pd.read_csv(file_path, encoding='utf-8-sig')
+            df = pd.read_csv(file_path, encoding='utf-8')
             logger.info(f"ETF 성과 데이터 로드: {len(df)}개")
             return df
         except Exception as e:
@@ -89,7 +98,7 @@ class ETFCacheGenerator:
         """ETF 자산규모 데이터 로드"""
         try:
             file_path = self.data_paths['etf_aum']
-            df = pd.read_csv(file_path, encoding='utf-8-sig')
+            df = pd.read_csv(file_path, encoding='utf-8')
             logger.info(f"ETF 자산규모 데이터 로드: {len(df)}개")
             return df
         except Exception as e:
@@ -100,28 +109,50 @@ class ETFCacheGenerator:
         """ETF 위험 데이터 로드"""
         try:
             file_path = self.data_paths['etf_risk']
-            df = pd.read_csv(file_path, encoding='utf-8-sig')
+            df = pd.read_csv(file_path, encoding='utf-8')
             logger.info(f"ETF 위험 데이터 로드: {len(df)}개")
             return df
         except Exception as e:
             logger.error(f"ETF 위험 데이터 로드 실패: {e}")
             return pd.DataFrame()
     
+    def _load_risk_tier_data(self) -> pd.DataFrame:
+        """ETF 위험등급 데이터 로드"""
+        try:
+            file_path = self.data_paths['risk_tier']
+            df = pd.read_csv(file_path, encoding='utf-8', low_memory=False)
+            # 필요한 컬럼만 선택 (종목코드, 종목명, risk_tier)
+            if 'itmsNm' in df.columns and 'risk_tier' in df.columns:
+                df = df[['itmsNm', 'risk_tier']].copy()
+                df.columns = ['종목명', 'risk_tier']
+            logger.info(f"ETF 위험등급 데이터 로드: {len(df)}개")
+            return df
+        except Exception as e:
+            logger.error(f"ETF 위험등급 데이터 로드 실패: {e}")
+            return pd.DataFrame()
+    
     def _merge_data(self, info_df: pd.DataFrame, perf_df: pd.DataFrame, 
-                   aum_df: pd.DataFrame, risk_df: pd.DataFrame) -> pd.DataFrame:
+                   aum_df: pd.DataFrame, risk_df: pd.DataFrame, risk_tier_df: pd.DataFrame) -> pd.DataFrame:
         """데이터 통합"""
         try:
-            # ETF명을 기준으로 데이터 통합
+            # 종목명을 기준으로 데이터 통합
             merged = info_df.copy()
             
             if not perf_df.empty:
-                merged = merged.merge(perf_df, on='ETF명', how='left', suffixes=('', '_perf'))
+                merged = merged.merge(perf_df, on='종목명', how='left', suffixes=('', '_perf'))
             
             if not aum_df.empty:
-                merged = merged.merge(aum_df, on='ETF명', how='left', suffixes=('', '_aum'))
+                merged = merged.merge(aum_df, on='종목명', how='left', suffixes=('', '_aum'))
             
             if not risk_df.empty:
-                merged = merged.merge(risk_df, on='ETF명', how='left', suffixes=('', '_risk'))
+                merged = merged.merge(risk_df, on='종목명', how='left', suffixes=('', '_risk'))
+            
+            if not risk_tier_df.empty:
+                merged = merged.merge(risk_tier_df, on='종목명', how='left', suffixes=('', '_tier'))
+            
+            # risk_tier가 없는 경우 기본값 설정
+            if 'risk_tier' not in merged.columns:
+                merged['risk_tier'] = 3  # 기본값: 중간 위험도
             
             logger.info(f"데이터 통합 완료: {len(merged)}개 ETF")
             return merged
@@ -131,7 +162,7 @@ class ETFCacheGenerator:
             return info_df
     
     def _calculate_objective_scores(self, df: pd.DataFrame) -> pd.DataFrame:
-        """객관적 점수 계산"""
+        """점수 계산 (투자자 유형별)"""
         df = df.copy()
         
         # 1. 수익률 점수 (0-1)
@@ -149,16 +180,10 @@ class ETFCacheGenerator:
         # 5. 안정성 점수 (0-1)
         df['stability_score'] = df.apply(self._calculate_stability_score, axis=1)
         
-        # 6. 기본 점수 (가중 평균)
-        df['base_score'] = (
-            df['return_score'] * 0.3 +
-            df['risk_adjusted_score'] * 0.25 +
-            df['cost_efficiency_score'] * 0.20 +
-            df['liquidity_score'] * 0.15 +
-            df['stability_score'] * 0.10
-        )
+        # 6. WMTI 투자자 유형별 점수 계산
+        df = self._calculate_wmti_type_scores(df)
         
-        logger.info("객관적 점수 계산 완료")
+        logger.info("투자자 유형별 점수 계산 완료")
         return df
     
     def _calculate_return_score(self, row: pd.Series) -> float:
@@ -218,20 +243,50 @@ class ETFCacheGenerator:
             return 0.5
     
     def _calculate_stability_score(self, row: pd.Series) -> float:
-        """안정성 점수 계산"""
+        """안정성 점수 계산 (자산규모 기반)"""
         try:
-            risk_tier = safe_float(row.get('risk_tier'))
+            aum = safe_float(row.get('자산규모'))
             
-            if risk_tier is not None:
-                # 0 ~ 5 범위에서 정규화 (낮을수록 높은 점수)
-                return max(0, min(1, 1 - (risk_tier / 5)))
+            if aum is not None:
+                # 0 ~ 1000억원 범위에서 정규화 (높을수록 높은 점수)
+                return max(0, min(1, aum / 10000000000))  # 1000억원으로 정규화
             else:
                 return 0.5
         except:
             return 0.5
     
+    def _calculate_wmti_type_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+        """WMTI 투자자 유형별 점수 계산"""
+        df = df.copy()
+        
+        # WMTI 투자자 유형별 가중치 가져오기
+        wmti_weights = self.config.WMTI_TYPE_WEIGHTS
+        
+        # 각 투자자 유형별로 점수 계산
+        for wmti_type, weights in wmti_weights.items():
+            score_column = f'score_{wmti_type}'
+            df[score_column] = (
+                df['return_score'] * weights['return_weight'] +
+                df['risk_adjusted_score'] * weights['risk_adjusted_return_weight'] +
+                df['cost_efficiency_score'] * weights['cost_efficiency_weight'] +
+                df['liquidity_score'] * weights['liquidity_weight'] +
+                df['stability_score'] * weights['stability_weight']
+            )
+        
+        # 기본 점수 (균형형 가중치)
+        df['total_score'] = (
+            df['return_score'] * 0.3 +
+            df['risk_adjusted_score'] * 0.25 +
+            df['cost_efficiency_score'] * 0.20 +
+            df['liquidity_score'] * 0.15 +
+            df['stability_score'] * 0.10
+        )
+        
+        logger.info(f"WMTI 투자자 유형별 점수 계산 완료: {len(wmti_weights)}개 유형")
+        return df
+    
     def _apply_level_filters(self, df: pd.DataFrame) -> pd.DataFrame:
-        """레벨별 필터링 적용"""
+        """레벨별 필터링 적용 및 최종 컬럼 정리"""
         df = df.copy()
         
         # 레벨별 위험도 필터링
@@ -245,7 +300,23 @@ class ETFCacheGenerator:
         # 레벨이 없는 ETF는 Level 3으로 설정
         df['level'] = df['level'].fillna(3)
         
-        logger.info("레벨별 필터링 완료")
+        # 캐시에 포함할 컬럼만 선택
+        cache_columns = [
+            '종목명', '종목코드', '분류체계', '기초지수', '운용사',
+            'return_score', 'risk_adjusted_score', 'cost_efficiency_score', 
+            'liquidity_score', 'stability_score', 'total_score',
+            'risk_tier', 'level', '자산규모', '거래량', '변동성', '총보수'
+        ]
+        
+        # WMTI 투자자 유형별 점수 컬럼 추가
+        wmti_score_columns = [f'score_{wmti_type}' for wmti_type in self.config.WMTI_TYPE_WEIGHTS.keys()]
+        cache_columns.extend(wmti_score_columns)
+        
+        # 존재하는 컬럼만 선택
+        available_columns = [col for col in cache_columns if col in df.columns]
+        df = df[available_columns]
+        
+        logger.info("레벨별 필터링 및 컬럼 정리 완료")
         return df
     
     def save_cache(self, df: pd.DataFrame, file_path: str = None):
@@ -267,14 +338,14 @@ def main():
         cache_data = generator.generate_cache()
         generator.save_cache(cache_data)
         
-        print(f"✅ ETF 캐시 생성 완료: {len(cache_data)}개 ETF")
-        print(f"📊 점수 분포:")
-        print(f"   - 평균 base_score: {cache_data['base_score'].mean():.3f}")
-        print(f"   - 최고 base_score: {cache_data['base_score'].max():.3f}")
-        print(f"   - 최저 base_score: {cache_data['base_score'].min():.3f}")
+        print(f"ETF 캐시 생성 완료: {len(cache_data)}개 ETF")
+        print(f"점수 분포:")
+        print(f"   - 평균 total_score: {cache_data['total_score'].mean():.3f}")
+        print(f"   - 최고 total_score: {cache_data['total_score'].max():.3f}")
+        print(f"   - 최저 total_score: {cache_data['total_score'].min():.3f}")
         
     except Exception as e:
-        print(f"❌ 캐시 생성 실패: {e}")
+        print(f"캐시 생성 실패: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

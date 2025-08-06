@@ -21,7 +21,7 @@ class Config:
     # =============================================================================
     DATA_PATHS = {
         'etf_info': 'data/상품검색.csv',
-        'etf_prices': 'data/ETF_시세_데이터_20240101_20250729.csv',
+        'etf_prices': 'data/ETF_시세_데이터_20230806_20250806.csv',
         'etf_performance': 'data/수익률 및 총보수(기간).csv',
         'etf_aum': 'data/자산규모 및 유동성(기간).csv',
         'etf_reference': 'data/참고지수(기간).csv',
@@ -31,102 +31,163 @@ class Config:
     }
     
         # =============================================================================
-    # WMTI 투자자 유형별 가중치 설정 (KB 투자자 유형 - 추천용)
-    # 4차원 8유형: 활동방향(A/I) × 투자인지(P/B) × 투자판단(M/W) × 행동패턴(L/C)
+    # WMTI 투자자 유형별 설명 
+    # =============================================================================
+    WMTI_TYPE_DESCRIPTIONS = {
+        "APWL": {
+            "name": "똘똘한 분산투자 능력자",
+            "description": "뛰어난 금융지식과 능숙한 투자 방법론 보유로 자신감이 뛰어남. #미래지향 #능숙한 #성장주"
+        },
+        "APML": {
+            "name": "타고난 리더형 투자 지도자",
+            "description": "공격적인 투자방식을 보유로 기회와 리스크의 이해가 뛰어남. #리더형 #종목발굴 #분석적인"
+        },
+        "APWC": {
+            "name": "당당하고 유능한 투자자",
+            "description": "나만의 투자 원칙과 능숙한 투자 방법론 보유로 판단력이 뛰어남. #박학다식 #자신감 #분산투자"
+        },
+        "APMC": {
+            "name": "박학다식한 투자의 달인",
+            "description": "뛰어난 금융지식과 금융시장 분석능력으로 전략적인 판단력이 뛰어남. #전문가형 #대담함 #집중투자"
+        },
+        "ABWL": {
+            "name": "통찰력있는 투자 예술인",
+            "description": "뛰어난 직관력과 통찰력 보유로 탁월한 커뮤니케이션 능력이 있음. #자신감 #적극적인 #응용통성"
+        },
+        "ABML": {
+            "name": "똑똑한 투자 트렌디세터",
+            "description": "전략적인 투자 접근법과 해박한 지식을 보유하고 있음. #전략적인 #호기심 #재능있는"
+        },
+        "ABWC": {
+            "name": "용감한 투자 탐정가",
+            "description": "뛰어난 직관력과 통찰력 보유로 탁월한 커뮤니케이션 능력이 있음. #트렌디한 #보수적인 #장재학"
+        },
+        "ABMC": {
+            "name": "시대를 앞서는 투자 리더",
+            "description": "폭넓은 관심과 해박한 지식 보유로 현실적인 계획 수립 능력이 있음. #박학다식극적인 수익추구"
+        },
+        "IPWL": {
+            "name": "노련한 투자의 아이콘",
+            "description": "구체적인 투자 목표와 확실한 비전으로 현실적인 계획수립에 능함. #현실적인 #성장형 #합리적인"
+        },
+        "IPML": {
+            "name": "전략적인 투자 연구자",
+            "description": "호기심 많은 투자자로 현실적인 계획수립 능력이 있음. #도전적인 #가치주 #전략적인"
+        },
+        "IPWC": {
+            "name": "다재다능한 투자 지휘관",
+            "description": "구체적인 투자 목표와 확실한 비전으로 장기적인 안목과 판단력이 뛰어남. #섬세한 #도전적인 #자산배분"
+        },
+        "IPMC": {
+            "name": "미래지향적 투자 탐험가",
+            "description": "호기심 많은 투자자로 현실적인 계획수립 능력이 있음. #자신감 #주도적인 #통찰력"
+        },
+        "IBWL": {
+            "name": "호기심 가득한 투자 관찰가",
+            "description": "호기심이 많고 신중하며 투자에 대한 합리적인 분별력이 뛰어남. #안정적인 #잠재력 #분산투자"
+        },
+        "IBML": {
+            "name": "도전을 즐기는 투자 샛별",
+            "description": "뛰어난 정보력과 빠른 판단력으로 현실적인 계획수립 능력이 있음. #보수적인 #경험중시 #수익추구"
+        },
+        "IBWC": {
+            "name": "잠재력있는 새싹 투자자",
+            "description": "호기심많고 신중하며 안전자산에 관심이 많음. #꼼꼼한 #팔로워형 #자산배분"
+        },
+        "IBMC": {
+            "name": "탐구하는 투자 탐색가",
+            "description": "투자의 대한 완벽주의를 보이며 투자 잠재력이 뛰어남. #통찰력 #실용적인 #객관적인"
+        }
+    }
+
+    # =============================================================================
+    # WMTI 투자자 유형별 가중치 
+    # 각 유형의 특성에 맞춰 가중치 조정
     # =============================================================================
     WMTI_TYPE_WEIGHTS = {
-        # 외향형 + 전문가형 + 집중형 + 자유형
-        'APML': {'return_weight': 0.4, 'risk_tolerance': 0.4, 'active_focus': 0.2},
-        'APMW': {'return_weight': 0.3, 'risk_tolerance': 0.3, 'balanced_focus': 0.4},
-        'APWL': {'return_weight': 0.3, 'risk_tolerance': 0.3, 'balanced_focus': 0.4},
-        'APWW': {'return_weight': 0.2, 'risk_tolerance': 0.2, 'diversified_focus': 0.6},
-        'ABML': {'return_weight': 0.4, 'risk_tolerance': 0.3, 'growth_focus': 0.3},
-        'ABMW': {'return_weight': 0.3, 'risk_tolerance': 0.2, 'balanced_focus': 0.5},
-        'ABWL': {'return_weight': 0.3, 'risk_tolerance': 0.2, 'balanced_focus': 0.5},
-        'ABWW': {'return_weight': 0.2, 'risk_tolerance': 0.1, 'diversified_focus': 0.7},
-        # 내향형 + 전문가형 + 집중형 + 자유형
-        'IPML': {'return_weight': 0.3, 'risk_tolerance': 0.2, 'focused_focus': 0.5},
-        'IPMW': {'return_weight': 0.2, 'risk_tolerance': 0.1, 'balanced_focus': 0.7},
-        'IPWL': {'return_weight': 0.2, 'risk_tolerance': 0.1, 'balanced_focus': 0.7},
-        'IPWW': {'return_weight': 0.1, 'risk_tolerance': 0.0, 'diversified_focus': 0.9},
-        'IBML': {'return_weight': 0.3, 'risk_tolerance': 0.2, 'growth_focus': 0.5},
-        'IBMW': {'return_weight': 0.2, 'risk_tolerance': 0.1, 'balanced_focus': 0.7},
-        'IBWL': {'return_weight': 0.2, 'risk_tolerance': 0.1, 'balanced_focus': 0.7},
-        'IBWW': {'return_weight': 0.1, 'risk_tolerance': 0.0, 'diversified_focus': 0.9}
+        # 외향형 + 전문가형 (공격적 투자 선호)
+        "APWL": {"return_weight": 0.35, "risk_adjusted_return_weight": 0.30, "cost_efficiency_weight": 0.15, "liquidity_weight": 0.15, "stability_weight": 0.05},
+        "APML": {"return_weight": 0.40, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.15, "liquidity_weight": 0.15, "stability_weight": 0.05},
+        "APWC": {"return_weight": 0.35, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.20, "liquidity_weight": 0.15, "stability_weight": 0.05},
+        "APMC": {"return_weight": 0.40, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.15, "liquidity_weight": 0.15, "stability_weight": 0.05},
+        
+        # 외향형 + 신중형 (균형적 투자 선호)
+        "ABWL": {"return_weight": 0.30, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.20, "liquidity_weight": 0.15, "stability_weight": 0.10},
+        "ABML": {"return_weight": 0.30, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.20, "liquidity_weight": 0.15, "stability_weight": 0.10},
+        "ABWC": {"return_weight": 0.25, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.25, "liquidity_weight": 0.15, "stability_weight": 0.10},
+        "ABMC": {"return_weight": 0.30, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.20, "liquidity_weight": 0.15, "stability_weight": 0.10},
+        
+        # 내향형 + 전문가형 (전략적 투자 선호)
+        "IPWL": {"return_weight": 0.25, "risk_adjusted_return_weight": 0.30, "cost_efficiency_weight": 0.25, "liquidity_weight": 0.10, "stability_weight": 0.10},
+        "IPML": {"return_weight": 0.30, "risk_adjusted_return_weight": 0.30, "cost_efficiency_weight": 0.20, "liquidity_weight": 0.10, "stability_weight": 0.10},
+        "IPWC": {"return_weight": 0.25, "risk_adjusted_return_weight": 0.30, "cost_efficiency_weight": 0.25, "liquidity_weight": 0.10, "stability_weight": 0.10},
+        "IPMC": {"return_weight": 0.30, "risk_adjusted_return_weight": 0.30, "cost_efficiency_weight": 0.20, "liquidity_weight": 0.10, "stability_weight": 0.10},
+        
+        # 내향형 + 신중형 (안정적 투자 선호)
+        "IBWL": {"return_weight": 0.20, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.25, "liquidity_weight": 0.15, "stability_weight": 0.15},
+        "IBML": {"return_weight": 0.25, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.25, "liquidity_weight": 0.15, "stability_weight": 0.10},
+        "IBWC": {"return_weight": 0.20, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.30, "liquidity_weight": 0.15, "stability_weight": 0.10},
+        "IBMC": {"return_weight": 0.25, "risk_adjusted_return_weight": 0.25, "cost_efficiency_weight": 0.25, "liquidity_weight": 0.15, "stability_weight": 0.10},
+    }
+
+    # =============================================================================
+    # MPTI 스타일 정의
+    # =============================================================================
+    MPTI_STYLES = {
+        'Fact': {
+            'name': '팩트형',
+            'description': '객관적 데이터와 사실에 기반한 설명을 선호합니다. 구체적인 수치, 통계, 검증 가능한 정보를 중심으로 설명하며, 주관적 판단보다는 객관적 사실을 중시합니다.',
+            'prompt': '객관적 데이터와 사실에 기반하여 설명해주세요. 구체적인 수치, 통계, 검증 가능한 정보를 중심으로 설명하고, 주관적 판단보다는 객관적 사실을 중시하여 답변해주세요.',
+            'transformations': {},
+            'additions': ['데이터 기반 분석 결과입니다.'],
+            'removals': []
+        },
+        'Opinion': {
+            'name': '오피니언형',
+            'description': '전문가의 관점과 주관적 분석을 포함한 설명을 선호합니다. 시장 분석가나 투자 전문가의 의견, 전망, 해석을 포함하여 종합적인 관점을 제공합니다.',
+            'prompt': '전문가의 관점과 주관적 분석을 포함하여 설명해주세요. 시장 분석가나 투자 전문가의 의견, 전망, 해석을 포함하여 종합적인 관점을 제공해주세요.',
+            'transformations': {},
+            'additions': ['전문가 관점에서 분석한 결과입니다.'],
+            'removals': []
+        },
+        'Intensive': {
+            'name': '집중형',
+            'description': '핵심 정보만 간결하고 집중적으로 제공하는 설명을 선호합니다. 불필요한 부연설명을 줄이고 가장 중요한 포인트에 집중하여 명확하게 전달합니다.',
+            'prompt': '핵심 정보만 간결하고 집중적으로 설명해주세요. 불필요한 부연설명을 줄이고 가장 중요한 포인트에 집중하여 명확하게 전달해주세요.',
+            'transformations': {},
+            'additions': ['핵심 요약입니다.'],
+            'removals': []
+        },
+        'Extensive': {
+            'name': '다각형',
+            'description': '다양한 관점과 배경 정보를 포함한 포괄적인 설명을 선호합니다. 여러 각도에서 분석하고, 관련된 배경 정보와 맥락을 함께 제공합니다.',
+            'prompt': '다양한 관점과 배경 정보를 포함하여 포괄적으로 설명해주세요. 여러 각도에서 분석하고, 관련된 배경 정보와 맥락을 함께 제공해주세요.',
+            'transformations': {},
+            'additions': ['다양한 관점에서 분석한 결과입니다.'],
+            'removals': []
+        },
+        'Skimming': {
+            'name': '요약형',
+            'description': '핵심 내용만 요약하여 빠르게 파악할 수 있는 설명을 선호합니다. 긴 설명보다는 핵심 포인트를 간단명료하게 정리하여 제공합니다.',
+            'prompt': '핵심 내용만 요약하여 빠르게 파악할 수 있도록 설명해주세요. 긴 설명보다는 핵심 포인트를 간단명료하게 정리하여 제공해주세요.',
+            'transformations': {},
+            'additions': ['요약된 분석 결과입니다.'],
+            'removals': []
+        },
+        'Perusing': {
+            'name': '상세형',
+            'description': '상세한 분석과 배경 정보를 포함한 깊이 있는 설명을 선호합니다. 기술적 지표, 기본적 분석, 시장 동향을 종합적으로 고려한 심층 분석을 제공합니다.',
+            'prompt': '상세한 분석과 배경 정보를 포함하여 깊이 있게 설명해주세요. 기술적 지표, 기본적 분석, 시장 동향을 종합적으로 고려한 심층 분석을 제공해주세요.',
+            'transformations': {},
+            'additions': ['상세 분석 결과입니다.'],
+            'removals': []
+        }
     }
     
     # =============================================================================
-    # WMTI 투자자 유형 설명 (추천용)
+    # MPTI 투자자 유형별 설명 (MPTI_STYLES와 동일)
     # =============================================================================
-    WMTI_TYPE_DESCRIPTIONS = {
-        'APML': '외향형+전문가형+집중형+자유형 - 적극적 전문 투자, 집중 관리',
-        'APMW': '외향형+전문가형+집중형+신중형 - 전문적 집중 투자, 신중한 접근',
-        'APWL': '외향형+전문가형+분산형+자유형 - 전문적 분산 투자, 자유로운 접근',
-        'APWW': '외향형+전문가형+분산형+신중형 - 전문적 분산 투자, 신중한 접근',
-        'ABML': '외향형+탐험가형+집중형+자유형 - 적극적 탐험 투자, 집중 관리',
-        'ABMW': '외향형+탐험가형+집중형+신중형 - 탐험적 집중 투자, 신중한 접근',
-        'ABWL': '외향형+탐험가형+분산형+자유형 - 탐험적 분산 투자, 자유로운 접근',
-        'ABWW': '외향형+탐험가형+분산형+신중형 - 탐험적 분산 투자, 신중한 접근',
-        'IPML': '내향형+전문가형+집중형+자유형 - 보수적 전문 투자, 집중 관리',
-        'IPMW': '내향형+전문가형+집중형+신중형 - 보수적 전문 투자, 신중한 접근',
-        'IPWL': '내향형+전문가형+분산형+자유형 - 보수적 전문 투자, 분산 관리',
-        'IPWW': '내향형+전문가형+분산형+신중형 - 보수적 전문 투자, 신중한 분산',
-        'IBML': '내향형+탐험가형+집중형+자유형 - 보수적 탐험 투자, 집중 관리',
-        'IBMW': '내향형+탐험가형+집중형+신중형 - 보수적 탐험 투자, 신중한 접근',
-        'IBWL': '내향형+탐험가형+분산형+자유형 - 보수적 탐험 투자, 분산 관리',
-        'IBWW': '내향형+탐험가형+분산형+신중형 - 보수적 탐험 투자, 신중한 분산'
-    }
-
-    # =============================================================================
-    # MPTI 투자자 유형별 가중치 설정 (마블콘텐츠선호지표 - 설명용)
-    # =============================================================================
-    INVESTOR_TYPE_WEIGHTS = {
-        # 일독형(Intensive) + 팩트형(Fact) + 속독형(Skimming) + 집중형(Absorbed)
-        'IFSA': {'I': 0.3, 'F': 0.3, 'S': 0.2, 'A': 0.2},  # 집중적 팩트 속독형
-        'IFSP': {'I': 0.3, 'F': 0.3, 'S': 0.2, 'P': 0.2},  # 집중적 팩트 속독형 (분산)
-        'IFPA': {'I': 0.3, 'F': 0.3, 'P': 0.2, 'A': 0.2},  # 집중적 팩트 정독형
-        'IFPP': {'I': 0.3, 'F': 0.3, 'P': 0.2, 'P': 0.2},  # 집중적 팩트 정독형 (분산)
-        
-        # 일독형(Intensive) + 오피니언형(Notion) + 속독형(Skimming) + 집중형(Absorbed)
-        'INSA': {'I': 0.3, 'N': 0.3, 'S': 0.2, 'A': 0.2},  # 집중적 오피니언 속독형
-        'INSP': {'I': 0.3, 'N': 0.3, 'S': 0.2, 'P': 0.2},  # 집중적 오피니언 속독형 (분산)
-        'INPA': {'I': 0.3, 'N': 0.3, 'P': 0.2, 'A': 0.2},  # 집중적 오피니언 정독형
-        'INPP': {'I': 0.3, 'N': 0.3, 'P': 0.2, 'P': 0.2},  # 집중적 오피니언 정독형 (분산)
-        
-        # 다독형(Extensive) + 팩트형(Fact) + 속독형(Skimming) + 집중형(Absorbed)
-        'EFSA': {'E': 0.3, 'F': 0.3, 'S': 0.2, 'A': 0.2},  # 분산적 팩트 속독형
-        'EFSP': {'E': 0.3, 'F': 0.3, 'S': 0.2, 'P': 0.2},  # 분산적 팩트 속독형 (분산)
-        'EFPA': {'E': 0.3, 'F': 0.3, 'P': 0.2, 'A': 0.2},  # 분산적 팩트 정독형
-        'EFPP': {'E': 0.3, 'F': 0.3, 'P': 0.2, 'P': 0.2},  # 분산적 팩트 정독형 (분산)
-        
-        # 다독형(Extensive) + 오피니언형(Notion) + 속독형(Skimming) + 집중형(Absorbed)
-        'ENSA': {'E': 0.3, 'N': 0.3, 'S': 0.2, 'A': 0.2},  # 분산적 오피니언 속독형
-        'ENSP': {'E': 0.3, 'N': 0.3, 'S': 0.2, 'P': 0.2},  # 분산적 오피니언 속독형 (분산)
-        'ENPA': {'E': 0.3, 'N': 0.3, 'P': 0.2, 'A': 0.2},  # 분산적 오피니언 정독형
-        'ENPP': {'E': 0.3, 'N': 0.3, 'P': 0.2, 'P': 0.2},  # 분산적 오피니언 정독형 (분산)
-    }
-
-    # =============================================================================
-    # MPTI 투자자 유형 설명 (설명용)
-    # =============================================================================
-    INVESTOR_TYPE_DESCRIPTIONS = {
-        'IFSA': '일독형(Intensive) + 팩트형(Fact) + 속독형(Skimming) + 집중형(Absorbed)',
-        'IFSP': '일독형(Intensive) + 팩트형(Fact) + 속독형(Skimming) + 분산형(Diverse)',
-        'IFPA': '일독형(Intensive) + 팩트형(Fact) + 정독형(Perusing) + 집중형(Absorbed)',
-        'IFPP': '일독형(Intensive) + 팩트형(Fact) + 정독형(Perusing) + 분산형(Diverse)',
-        'INSA': '일독형(Intensive) + 오피니언형(Notion) + 속독형(Skimming) + 집중형(Absorbed)',
-        'INSP': '일독형(Intensive) + 오피니언형(Notion) + 속독형(Skimming) + 분산형(Diverse)',
-        'INPA': '일독형(Intensive) + 오피니언형(Notion) + 정독형(Perusing) + 집중형(Absorbed)',
-        'INPP': '일독형(Intensive) + 오피니언형(Notion) + 정독형(Perusing) + 분산형(Diverse)',
-        'EFSA': '다독형(Extensive) + 팩트형(Fact) + 속독형(Skimming) + 집중형(Absorbed)',
-        'EFSP': '다독형(Extensive) + 팩트형(Fact) + 속독형(Skimming) + 분산형(Diverse)',
-        'EFPA': '다독형(Extensive) + 팩트형(Fact) + 정독형(Perusing) + 집중형(Absorbed)',
-        'EFPP': '다독형(Extensive) + 팩트형(Fact) + 정독형(Perusing) + 분산형(Diverse)',
-        'ENSA': '다독형(Extensive) + 오피니언형(Notion) + 속독형(Skimming) + 집중형(Absorbed)',
-        'ENSP': '다독형(Extensive) + 오피니언형(Notion) + 속독형(Skimming) + 분산형(Diverse)',
-        'ENPA': '다독형(Extensive) + 오피니언형(Notion) + 정독형(Perusing) + 집중형(Absorbed)',
-        'ENPP': '다독형(Extensive) + 오피니언형(Notion) + 정독형(Perusing) + 분산형(Diverse)',
-    }
+    INVESTOR_TYPE_DESCRIPTIONS = MPTI_STYLES
     
     # =============================================================================
     # 레벨별 Risk Tier 허용 범위 (5단계)
@@ -277,12 +338,21 @@ MPTI 투자자 유형별 특성:
     @classmethod
     def get_investor_type_description(cls, investor_type: str) -> str:
         """MPTI 투자자 유형 설명 반환 (설명용)"""
-        return cls.INVESTOR_TYPE_DESCRIPTIONS.get(investor_type, '알 수 없는 유형')
+        # MPTI 스타일인 경우
+        if investor_type in cls.MPTI_STYLES:
+            return cls.MPTI_STYLES[investor_type]['name']
+        # WMTI 유형인 경우
+        elif investor_type in cls.WMTI_TYPE_DESCRIPTIONS:
+            return cls.WMTI_TYPE_DESCRIPTIONS[investor_type]['name']
+        return "알 수 없는 유형"
     
     @classmethod
     def get_wmti_type_description(cls, wmti_type: str) -> str:
         """WMTI 투자자 유형 설명 반환 (추천용)"""
-        return cls.WMTI_TYPE_DESCRIPTIONS.get(wmti_type, '알 수 없는 유형')
+        wmti_info = cls.WMTI_TYPE_DESCRIPTIONS.get(wmti_type, {})
+        if isinstance(wmti_info, dict):
+            return f"{wmti_info.get('name', '알 수 없는 유형')} - {wmti_info.get('description', '')}"
+        return str(wmti_info)
     
     @classmethod
     def get_risk_tier_limit(cls, level: int) -> int:
@@ -293,9 +363,11 @@ MPTI 투자자 유형별 특성:
     def get_wmti_weights(cls, wmti_type: str) -> Dict[str, float]:
         """WMTI 투자자 유형별 가중치 반환"""
         return cls.WMTI_TYPE_WEIGHTS.get(wmti_type, {
-            'return_weight': 0.3, 
-            'risk_tolerance': 0.2, 
-            'balance_focus': 0.5
+            'return_weight': 0.30,
+            'risk_adjusted_return_weight': 0.25,
+            'cost_efficiency_weight': 0.20,
+            'liquidity_weight': 0.15,
+            'stability_weight': 0.10,
         })
     
     @classmethod

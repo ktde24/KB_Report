@@ -21,7 +21,7 @@ import numpy as np
 # =============================================================================
 
 # 입력/출력 파일 경로
-INPUT_CSV   = 'data/ETF_시세_데이터_20240101_20250729.csv'  # ETF 시세 데이터
+INPUT_CSV   = 'data/ETF_시세_데이터_20230806_20250806.csv'  # ETF 시세 데이터
 OUTPUT_CSV  = 'data/etf_re_bp_simplified.csv'              # 위험도 분류 결과
 
 # 롤링 윈도우 크기 (약 6개월, 126영업일 기준)
@@ -156,21 +156,13 @@ print("Risk Score 계산 및 분류 중")
 # 1. Risk Score 계산 (가중합)
 df['Risk_Score'] = sum(W_RISK[m] * df[f'n_{m}'] for m in risk_metrics)
 
-# 2. R/E 분류 (Risk-averse vs Eager)
-# Risk_Score ≤ 0.4: R (Risk-averse, 위험 회피형)
-# Risk_Score > 0.4: E (Eager, 공격 투자형)
-df['risk_bin'] = np.where(df['Risk_Score'] <= 0.4, 'R', 'E')
-
-# 3. Risk Tier 계산 (5단계 등급화)
+# 2. Risk Tier 계산 (5단계 등급화)
 if not df['Risk_Score'].empty:
     # 날짜별로 Risk_Score를 5개 구간으로 분할
     df['risk_tier'] = df.groupby('basDt')['Risk_Score']\
                         .transform(lambda x: pd.qcut(x, 5, labels=False, duplicates='drop'))
-
-# 4. B/P 분류 (Buy-and-hold vs Portfolio)
-# 최대낙폭 ≤ 20%: B (Buy-and-hold, 장기 보유형)
-# 최대낙폭 > 20%: P (Portfolio, 포트폴리오 조정형)
-df['strat_bin'] = np.where(df['max_dd'] <= TH_MDD, 'B', 'P')
+else:
+    df['risk_tier'] = 2  # 기본값: 중간 위험도
 
 # =============================================================================
 # 결과 저장
@@ -182,9 +174,7 @@ cols = [
     'srtnCd',     # 종목코드
     'itmsNm',     # 종목명
     'Risk_Score', # 위험도 점수
-    'risk_bin',   # R/E 분류
-    'risk_tier',  # 위험 등급 (0~4)
-    'strat_bin'   # B/P 분류
+    'risk_tier'   # 위험 등급 (0~4)
 ]
 
 df[cols].to_csv(OUTPUT_CSV, index=False, encoding='utf-8-sig')
@@ -209,8 +199,8 @@ print(f"   - 기간: {date_range}")
 
 # 분류별 통계
 print(f"\n분류 통계:")
-print(f"   - R/E 분류: R(위험회피형) {len(df[df['risk_bin']=='R']):,}개, E(공격투자형) {len(df[df['risk_bin']=='E']):,}개")
-print(f"   - B/P 분류: B(장기보유형) {len(df[df['strat_bin']=='B']):,}개, P(포트폴리오형) {len(df[df['strat_bin']=='P']):,}개")
+print(f"   - Risk Score 평균: {df['Risk_Score'].mean():.3f}")
+print(f"   - Risk Score 범위: {df['Risk_Score'].min():.3f} ~ {df['Risk_Score'].max():.3f}")
 
 # Risk Tier 분포
 if 'risk_tier' in df.columns:

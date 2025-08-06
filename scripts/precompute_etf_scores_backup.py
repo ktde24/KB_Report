@@ -2,7 +2,6 @@
 ETF 점수 캐시 생성 스크립트
 - 모든 ETF에 대해 레벨별, 투자자 유형별 점수를 사전 계산
 - risk_tier 기반 레벨별 필터링 적용
-- 48,000개 조합 (995개 ETF × 3레벨 × 16유형) 캐시 생성
 
 주요 기능:
 1. ETF 기본 정보 및 시세 데이터 로딩
@@ -151,8 +150,8 @@ class ETFCacheBuilder:
         단일 ETF에 대한 모든 조합 처리
         
         각 ETF에 대해 다음 조합을 생성:
-        - 3개 레벨 (Level 1, 2, 3)
-        - 16개 투자자 유형 (ARSB, ARSE, ..., IESE)
+        - 3개 레벨 (Level 1, 2, 3, 4, 5)
+        - 16개 투자자 유형
         - 총 48개 조합 per ETF
         
         Args:
@@ -166,7 +165,7 @@ class ETFCacheBuilder:
         
         try:
             # ETF 분석 수행 (기본 프로필 사용)
-            base_profile = {"level": 1, "investor_type": "ARSB"}
+            base_profile = {"level": 1, "wmti_type": "ABWC"}
             etf_info = analyze_etf(
                 etf_name, base_profile,
                 self.data['prices'], self.data['info'],
@@ -187,7 +186,7 @@ class ETFCacheBuilder:
             records = []
             
             # 모든 레벨과 투자자 유형 조합 생성
-            for level in [1, 2, 3]:
+            for level in [1, 2, 3, 4, 5]:
                 # 레벨별 risk_tier 제한 확인
                 risk_limit = self.config.get_risk_tier_limit(level)
                 
@@ -203,20 +202,31 @@ class ETFCacheBuilder:
                 else:
                     effective_score = base_score
                 
-                # 모든 투자자 유형에 대해 처리
-                for investor_type in self.config.INVESTOR_TYPE_WEIGHTS.keys():
-                    # 투자자 유형별 가중치 계산
-                    type_weight = self.recommendation_engine.calculate_type_weight_cache(
-                        etf_row, investor_type
-                    )
+                # 모든 WMTI 투자자 유형에 대해 처리
+                for wmti_type in self.config.WMTI_TYPE_WEIGHTS.keys():
+                    # WMTI 투자자 유형별 가중치 적용
+                    wmti_weights = self.config.get_wmti_weights(wmti_type)
                     
-                    # 최종 점수 계산
-                    final_score = effective_score * type_weight
+                    # 개별 지표 점수 계산
+                    return_score = self._normalize_return_score(etf_info.get('시세분석', {}))
+                    risk_adjusted_score = self._calculate_risk_adjusted_score(etf_info)
+                    cost_efficiency_score = self._normalize_fee_score(etf_info.get('수익률/보수', {}))
+                    liquidity_score = self._normalize_volume_score(etf_info.get('자산규모/유동성', {}))
+                    stability_score = self._normalize_stability_score(etf_info.get('자산규모/유동성', {}))
+                    
+                    # WMTI 가중치 적용한 최종 점수 계산
+                    final_score = (
+                        return_score * wmti_weights.get('return_weight', 0.3) +
+                        risk_adjusted_score * wmti_weights.get('risk_adjusted_return_weight', 0.25) +
+                        cost_efficiency_score * wmti_weights.get('cost_efficiency_weight', 0.2) +
+                        liquidity_score * wmti_weights.get('liquidity_weight', 0.15) +
+                        stability_score * wmti_weights.get('stability_weight', 0.1)
+                    ) * effective_score
                     
                     # 레코드 생성
                     record = self._create_record(
-                        etf_row, etf_info, level, investor_type,
-                        base_score, type_weight, final_score, risk_tier
+                        etf_row, etf_info, level, wmti_type,
+                        base_score, final_score, risk_tier
                     )
                     records.append(record)
             
@@ -344,15 +354,81 @@ class ETFCacheBuilder:
             '높음': 0.8, '매우높음': 1.0
         }
         return grade_scores.get(volatility, 0.6)
+    
+    def _calculate_risk_adjusted_score(self, etf_info: Dict[str, Any]) -> float:
+        """
+        위험조정수익률 점수 계산
+        
+        Args:
+            etf_info: ETF 분석 정보
+        
+        Returns:
+            위험조정수익률 점수 (0.0~1.0)
+        """
+        try:
+            market_data = etf_info.get('시세분석', {})
+            risk_data = etf_info.get('위험', {})
+            
+            # 1년 수익률
+            return_1y = market_data.get('1년 수익률')
+            if return_1y is None or pd.isna(return_1y):
+                return 0.5
+            
+            # 변동성 (숫자로 변환)
+            volatility_str = risk_data.get('변동성', '보통')
+            volatility_map = {
+                '매우낮음': 0.05, '낮음': 0.1, '보통': 0.15, 
+                '높음': 0.25, '매우높음': 0.4
+            }
+            volatility = volatility_map.get(volatility_str, 0.15)
+            
+            if volatility > 0:
+                sharpe_ratio = return_1y / volatility
+                # -2 ~ +2 범위에서 정규화
+                return max(0, min(1, (sharpe_ratio + 2) / 4))
+            else:
+                return 0.5
+                
+        except Exception as e:
+            logger.warning(f"위험조정수익률 점수 계산 오류: {e}")
+            return 0.5
+    
+    def _normalize_stability_score(self, aum_data: Dict) -> float:
+        """
+        안정성 점수 계산 (자산규모 기반)
+        
+        Args:
+            aum_data: 자산규모/유동성 데이터
+        
+        Returns:
+            정규화된 안정성 점수 (0.0~1.0)
+        """
+        aum = aum_data.get('자산규모')
+        if aum is None or pd.isna(aum):
+            return 0.5
+        
+        try:
+            # 문자열에서 숫자 추출
+            if isinstance(aum, str):
+                # "1,234억원" 형태 처리
+                aum_str = aum.replace('억원', '').replace(',', '')
+                aum_val = float(aum_str) * 100000000  # 억원을 원으로 변환
+            else:
+                aum_val = float(aum)
+            
+            # 0 ~ 1000억원 범위에서 정규화
+            return max(0, min(1, aum_val / 100000000000))  # 1000억원 기준
+            
+        except (ValueError, TypeError):
+            return 0.5
 
     def _create_record(
         self, 
         etf_row: pd.Series, 
         etf_info: Dict[str, Any],
         level: int, 
-        investor_type: str,
+        wmti_type: str,
         base_score: float, 
-        type_weight: float, 
         final_score: float,
         risk_tier: int
     ) -> Dict[str, Any]:
@@ -363,9 +439,8 @@ class ETFCacheBuilder:
             etf_row: ETF 기본 정보
             etf_info: ETF 분석 정보
             level: 사용자 레벨
-            investor_type: 투자자 유형
+            wmti_type: WMTI 투자자 유형
             base_score: 기본 점수
-            type_weight: 유형별 가중치
             final_score: 최종 점수
             risk_tier: 위험도 등급
         
@@ -381,11 +456,10 @@ class ETFCacheBuilder:
             
             # 사용자 프로필
             'level': level,
-            'investor_type': investor_type,
+            'wmti_type': wmti_type,
             
             # 점수 정보
             'base_score': round(base_score, 4),
-            'type_weight': round(type_weight, 4),
             'final_score': round(final_score, 4),
             'risk_tier': risk_tier,
             

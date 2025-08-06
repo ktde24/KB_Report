@@ -77,8 +77,8 @@ class GPTClient:
         # OpenAI 클라이언트 초기화 시도
         if self.api_key and openai:
             try:
-                openai.api_key = self.api_key
-                self.client = openai
+                # OpenAI 1.0.0+ 버전용 클라이언트 초기화
+                self.client = openai.OpenAI(api_key=self.api_key)
                 logger.info("OpenAI 클라이언트 초기화 완료")
             except Exception as e:
                 logger.error(f"OpenAI 클라이언트 초기화 실패: {e}")
@@ -98,14 +98,16 @@ class GPTClient:
         """
         return bool(self.api_key and self.client)
 
-    def generate_response(self, prompt: str, max_tokens: Optional[int] = None) -> str:
+    def generate_response(self, prompt: str = None, system_prompt: str = None, user_prompt: str = None, max_tokens: Optional[int] = None) -> str:
         """
         GPT API를 통해 응답 생성
         
         주어진 프롬프트를 GPT에 전송하여 자연어 응답을 생성합니다.
         
         Args:
-            prompt: GPT에 전송할 프롬프트 문자열
+            prompt: GPT에 전송할 프롬프트 문자열 (단일 프롬프트 사용 시)
+            system_prompt: 시스템 프롬프트 (분리된 프롬프트 사용 시)
+            user_prompt: 사용자 프롬프트 (분리된 프롬프트 사용 시)
             max_tokens: 최대 토큰 수 (None인 경우 기본값 사용)
         
         Returns:
@@ -117,13 +119,26 @@ class GPTClient:
             return "GPT API 키가 설정되지 않았거나 라이브러리가 설치되지 않았습니다."
         
         try:
-            # GPT API 호출
-            response = self.client.ChatCompletion.create(
-                model=self.model,
-                messages=[
+            # 메시지 구성
+            messages = []
+            
+            if system_prompt and user_prompt:
+                # 분리된 프롬프트 사용
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+            else:
+                # 단일 프롬프트 사용
+                messages = [
                     {"role": "system", "content": "당신은 ETF 투자 전문가입니다. 사용자의 투자 레벨에 맞는 친근하고 이해하기 쉬운 답변을 제공해주세요."},
                     {"role": "user", "content": prompt}
-                ],
+                ]
+            
+            # GPT API 호출 (OpenAI 1.0.0+ 버전)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
                 max_tokens=max_tokens or self.max_tokens,
                 temperature=0.7
             )
@@ -134,9 +149,16 @@ class GPTClient:
             return content
             
         except Exception as e:
-            error_msg = f"GPT API 호출 중 오류 발생: {str(e)}"
-            logger.error(error_msg)
-            return f"⚠️ {error_msg}"
+            error_msg = str(e)
+            logger.error(f"GPT API 호출 중 오류 발생: {error_msg}")
+            
+            # 할당량 초과 또는 API 키 문제인 경우 대체 응답 제공
+            if "insufficient_quota" in error_msg or "quota" in error_msg.lower():
+                return self._generate_fallback_response(prompt, system_prompt, user_prompt)
+            elif "api_key" in error_msg.lower() or "authentication" in error_msg.lower():
+                return "⚠️ OpenAI API 키가 유효하지 않습니다. API 키를 확인해주세요."
+            else:
+                return f"⚠️ GPT API 호출 중 오류 발생: {error_msg}"
 
     def _parse_response(self, response: Any) -> str:
         """
@@ -151,7 +173,7 @@ class GPTClient:
             str: 파싱된 텍스트 내용
         """
         try:
-            # OpenAI ChatCompletion 응답에서 content 추출
+            # OpenAI 1.0.0+ ChatCompletion 응답에서 content 추출
             if hasattr(response, 'choices') and response.choices:
                 return response.choices[0].message.content
             elif isinstance(response, dict) and 'choices' in response:
@@ -189,11 +211,8 @@ class GPTClient:
             # 2. 사용자 요청 프롬프트 생성 (ETF 분석 요청)
             user_request = self._create_analysis_request(etf_info, user_profile)
             
-            # 3. 최종 프롬프트 결합
-            full_prompt = f"{system_prompt}\n\n{user_request}"
-            
             # 4. GPT API 호출하여 응답 생성
-            return self.generate_response(full_prompt)
+            return self.generate_response(system_prompt=system_prompt, user_prompt=user_request)
             
         except Exception as e:
             error_msg = f"ETF 분석 생성 중 오류: {str(e)}"
@@ -322,9 +341,9 @@ ETF 상세 정보:
             # 추천 ETF 정보 포맷팅
             formatted_recommendations = self._format_recommendations(recommendations)
             
-                    # 사용자 프로필 정보
-        user_level = user_profile.get('level', 3)  # 기본값: Level 3 (중급자)
-        investor_type = user_profile.get('investor_type', 'IFSA')  # 기본값: 일독형+팩트형+속독형+집중형
+            # 사용자 프로필 정보
+            user_level = user_profile.get('level', 3)  # 기본값: Level 3 (중급자)
+            investor_type = user_profile.get('investor_type', 'IFSA')  # 기본값: 일독형+팩트형+속독형+집중형
             investor_description = self.config.get_investor_type_description(investor_type)
             
             # 추천 요청 프롬프트 생성
@@ -376,3 +395,49 @@ ETF 상세 정보:
             formatted_parts.append("")
         
         return "\n".join(formatted_parts) 
+
+    def _generate_fallback_response(self, prompt: str = None, system_prompt: str = None, user_prompt: str = None) -> str:
+        """
+        API 할당량 초과 시 대체 응답 생성
+        
+        Args:
+            prompt: 원본 프롬프트
+            system_prompt: 시스템 프롬프트
+            user_prompt: 사용자 프롬프트
+            
+        Returns:
+            str: 대체 응답 텍스트
+        """
+        try:
+            # 사용자 입력에서 ETF 정보 추출
+            user_input = prompt or user_prompt or ""
+            
+            # 기본 대체 응답
+            fallback_response = """
+⚠️ **OpenAI API 할당량 초과 안내**
+
+현재 OpenAI API 사용량이 한도를 초과했습니다. 
+
+**해결 방법:**
+1. OpenAI 계정에서 결제 정보를 확인하세요
+2. 새로운 API 키를 발급받으세요
+3. 잠시 후 다시 시도해주세요
+
+**임시 분석 결과:**
+ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 참고하시기 바랍니다.
+"""
+            
+            # ETF 관련 키워드가 있으면 더 구체적인 응답
+            if any(keyword in user_input.lower() for keyword in ['etf', '투자', '분석', '추천']):
+                fallback_response += """
+**ETF 투자 참고사항:**
+- 수익률과 위험도를 함께 고려하세요
+- 분산 투자로 리스크를 관리하세요
+- 장기 투자 관점에서 접근하세요
+"""
+            
+            return fallback_response.strip()
+            
+        except Exception as e:
+            logger.error(f"대체 응답 생성 중 오류: {e}")
+            return "⚠️ API 할당량 초과로 인해 상세 분석을 제공할 수 없습니다. 잠시 후 다시 시도해주세요." 

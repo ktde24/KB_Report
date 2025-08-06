@@ -19,7 +19,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 # 공통 유틸리티 임포트
 from .etf_analysis import analyze_etf
-from .config import LEVEL_PROMPTS
+from .config import Config
 from .recommendation_engine import ETFRecommendationEngine
 from .config import Config
 from .utils import (
@@ -221,7 +221,7 @@ class ETFComparison:
             etf_cache = self.cache_df[
                 (self.cache_df['ETF명'] == etf_name) &
                 (self.cache_df['level'] == level) &
-                (self.cache_df['investor_type'] == investor_type)
+                (self.cache_df['wmti_type'] == investor_type)
             ]
             
             if not etf_cache.empty:
@@ -229,7 +229,7 @@ class ETFComparison:
                 return {
                     # 점수 정보
                     'base_score': cache_row['base_score'],
-                    'type_weight': cache_row['type_weight'],
+                    'type_weight': 1.0,  # 기본값 사용
                     'final_score': cache_row['final_score'],
                     'risk_tier': cache_row['risk_tier'],
                     

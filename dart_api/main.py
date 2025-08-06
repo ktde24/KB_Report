@@ -7,11 +7,12 @@ from dotenv import load_dotenv
 
 from corpcode_loader import get_corp_code
 from dart_api import get_report_list, get_full_html
+from utils.gpt_client import call_gpt
 
 load_dotenv()
-API_KEY       = os.getenv("DART_API_KEY")
-CLOVA_API_KEY = os.getenv("CLOVA_API_KEY")
-CLOVA_EP      = "https://clovastudio.stream.ntruss.com/testapp/v3/chat-completions/HCX-005"
+API_KEY = os.getenv("DART_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 def html_to_text(html: str) -> str:
     """HTML → 본문 텍스트만 추출"""
@@ -20,8 +21,8 @@ def html_to_text(html: str) -> str:
         tag.decompose()
     return soup.get_text(separator="\n", strip=True)
 
-def build_payload(report_type: str, body_text: str) -> dict:
-    """클로바X 호출용 JSON 페이로드 생성"""
+def build_gpt_messages(report_type: str, body_text: str) -> list:
+    """GPT 호출용 메시지 리스트 생성"""
     system_prompt = (
         "당신은 금융 애널리스트이자 기업공시 전문 파서입니다.\n"
         "아래에 주어진 DART 공시 전문 텍스트를 읽고, 투자자 관점에서 요약해 주세요:\n\n"\
@@ -46,44 +47,14 @@ def build_payload(report_type: str, body_text: str) -> dict:
         "위 텍스트를 바탕으로, 투자자 관점의 **핵심 요약**과 **주요 수치**를 정리해 주세요."
     )
 
-    return {
-        "messages": [
-            {"role":"system", "content": system_prompt},
-            {"role":"user",   "content": user_content}
-        ],
-        "stream": False,
-        "temperature": 0.1,
-        "topP":        0.6,
-        "maxTokens":   800,
-        "seed":        0
-    }
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content}
+    ]
 
-def call_clovax(payload: dict, api_key: str) -> str:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    resp = requests.post(
-        "https://clovastudio.stream.ntruss.com/testapp/v3/chat-completions/HCX-005",
-        headers=headers,
-        json=payload,
-        timeout=30
-    )
-    data = resp.json()
-
-    # 1) status 체크
-    if data.get("status", {}).get("code") != "20000":
-        raise RuntimeError(f"ClovaX API 에러: {data}")
-
-    # 2) result → message → content 로 내려온 답변 추출
-    result = data.get("result", {})
-    message = result.get("message", {})
-    content = message.get("content")
-    if not content:
-        raise RuntimeError(f"예상치 못한 응답 형식: {data}")
-
-    return content
+def call_gpt_with_messages(messages: list, api_key: str, model: str = "gpt-4o-mini") -> str:
+    """GPT API 호출"""
+    return call_gpt(messages, api_key, model, temperature=0.1)
 
 
 
@@ -111,11 +82,11 @@ if __name__ == "__main__":
             continue
 
         text = html_to_text(html)
-        payload = build_payload(title, text)
+        messages = build_gpt_messages(title, text)
 
         try:
-            summary = call_clovax(payload, CLOVA_API_KEY)
+            summary = call_gpt_with_messages(messages, OPENAI_API_KEY, OPENAI_MODEL)
             print("\n=== 요약 결과 ===\n")
             print(summary)
         except Exception as e:
-            print("ClovaX 호출 실패:", e)
+            print("GPT API 호출 실패:", e)

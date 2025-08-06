@@ -52,6 +52,22 @@ def extract_etf_name_from_input(user_input: str, info_df: pd.DataFrame) -> str:
     candidates = list(info_df['종목명'].dropna())
     norm_input = normalize_etf_name(user_input)
     
+    # 일반적인 ETF 브랜드 매핑
+    brand_mapping = {
+        '타이거': 'TIGER',
+        'tiger': 'TIGER',
+        '코덱스': 'KODEX',
+        'kodex': 'KODEX',
+        '티그': 'TIGER',
+        '티거': 'TIGER',
+        '코덱': 'KODEX'
+    }
+    
+    # 브랜드 매핑 적용
+    for korean, english in brand_mapping.items():
+        if korean in norm_input:
+            norm_input = norm_input.replace(korean, english.lower())
+    
     # 1단계: 정확한 매칭
     for name in candidates:
         if normalize_etf_name(name) == norm_input:
@@ -63,7 +79,18 @@ def extract_etf_name_from_input(user_input: str, info_df: pd.DataFrame) -> str:
         if norm_input in norm_name or norm_name in norm_input:
             return name
     
-    # 3단계: 유사도 기반 매칭
+    # 3단계: 키워드 기반 매칭
+    input_words = norm_input.split()
+    for name in candidates:
+        norm_name = normalize_etf_name(name)
+        name_words = norm_name.split()
+        
+        # 입력 단어들이 ETF명에 포함되는지 확인
+        matches = sum(1 for word in input_words if any(word in name_word for name_word in name_words))
+        if matches >= len(input_words) * 0.7:  # 70% 이상 매칭
+            return name
+    
+    # 4단계: 유사도 기반 매칭
     best_match = None
     best_score = 0
     
@@ -71,7 +98,7 @@ def extract_etf_name_from_input(user_input: str, info_df: pd.DataFrame) -> str:
         norm_name = normalize_etf_name(name)
         # 간단한 유사도 계산 (공통 문자 수)
         common_chars = len(set(norm_input) & set(norm_name))
-        if common_chars > best_score and common_chars >= len(norm_input) * 0.5:
+        if common_chars > best_score and common_chars >= len(norm_input) * 0.3:  # 임계값 낮춤
             best_score = common_chars
             best_match = name
     
@@ -268,11 +295,12 @@ def validate_user_profile(user_profile: Dict[str, Any]) -> Dict[str, Any]:
         validated['investor_type'] = 'IFSA'  # 기본값: 일독형+팩트형+속독형+집중형
     
     # WMTI 투자자 유형 검증 (추천용)
-    wmti_type = validated.get('wmti_type', 'ABML')
-    valid_wmti_types = ['APML', 'APMW', 'APWL', 'APWW', 'ABML', 'ABMW', 'ABWL', 'ABWW',
-                       'IPML', 'IPMW', 'IPWL', 'IPWW', 'IBML', 'IBMW', 'IBWL', 'IBWW']
+    wmti_type = validated.get('wmti_type', 'BALANCED')
+    valid_wmti_types = ['GROWTH', 'VALUE', 'DIVIDEND', 'SAFE', 'AGGRESSIVE', 'BALANCED', 
+                       'SECTOR', 'THEME', 'INTERNATIONAL', 'DOMESTIC', 'LARGE_CAP', 
+                       'SMALL_CAP', 'HIGH_RISK', 'LOW_RISK', 'ACTIVE', 'PASSIVE']
     if wmti_type not in valid_wmti_types:
-        validated['wmti_type'] = 'ABML'  # 기본값: 외향형+탐험가형+집중형+자유형
+        validated['wmti_type'] = 'BALANCED'  # 기본값: 균형 투자 선호
     
     return validated
 

@@ -304,9 +304,16 @@ class KBChatbotApp:
         # 사용자 프로필 설정
         st.sidebar.markdown("### 👤 사용자 프로필")
         
+        # 현재 선택된 값 가져오기
+        current_profile = st.session_state.get('user_profile', {})
+        current_level = current_profile.get('level', 1)
+        current_wmti = current_profile.get('wmti_type', 'IBMC')
+        current_mpti = current_profile.get('mpti_type', 'Fact')
+        
         user_level = st.sidebar.selectbox(
             "투자 경험 레벨",
             options=[1, 2, 3, 4, 5],
+            index=current_level-1,  # 0-based index
             format_func=lambda x: f"Level {x} - {self._get_level_description(x)}",
             help="투자 경험 수준을 선택하세요."
         )
@@ -314,6 +321,7 @@ class KBChatbotApp:
         wmti_type = st.sidebar.selectbox(
             "투자 성향 (WMTI)",
             options=list(Config.WMTI_TYPE_DESCRIPTIONS.keys()),
+            index=list(Config.WMTI_TYPE_DESCRIPTIONS.keys()).index(current_wmti) if current_wmti in Config.WMTI_TYPE_DESCRIPTIONS else 0,
             format_func=lambda x: f"{x} - {Config.WMTI_TYPE_DESCRIPTIONS[x]['name']}",
             help="투자 성향 유형을 선택하세요."
         )
@@ -321,25 +329,24 @@ class KBChatbotApp:
         mpti_type = st.sidebar.selectbox(
             "설명 스타일 (MPTI)",
             options=list(Config.MPTI_STYLES.keys()),
+            index=list(Config.MPTI_STYLES.keys()).index(current_mpti) if current_mpti in Config.MPTI_STYLES else 0,
             format_func=lambda x: f"{Config.MPTI_STYLES[x]['name']} - {Config.MPTI_STYLES[x]['description']}",
             help="선호하는 설명 스타일을 선택하세요."
         )
         
-        # 사용자 프로필 저장
-        if 'user_profile' not in st.session_state:
-            st.session_state.user_profile = {
-                'level': user_level,
-                'wmti_type': wmti_type,
-                'mpti_type': mpti_type
-            }
-        else:
-            st.session_state.user_profile.update({
-                'level': user_level,
-                'wmti_type': wmti_type,
-                'mpti_type': mpti_type
-            })
+        # 디버깅 정보 표시 (개발 중에만)
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("**현재 설정값:**")
+        st.sidebar.markdown(f"- 레벨: {user_level}")
+        st.sidebar.markdown(f"- WMTI: {wmti_type}")
+        st.sidebar.markdown(f"- MPTI: {mpti_type}")
         
-        # 빠른 질문 버튼 제거 - 사용자가 직접 입력하도록 함
+        # 사용자 프로필 저장
+        st.session_state.user_profile = {
+            'level': user_level,
+            'wmti_type': wmti_type,
+            'mpti_type': mpti_type
+        }
 
     def _get_level_description(self, level: int) -> str:
         """레벨별 설명 반환"""
@@ -358,10 +365,18 @@ class KBChatbotApp:
         if "messages" not in st.session_state:
             st.session_state.messages = []
         
-        # 환영 메시지
+        # 현재 사용자 프로필 가져오기
+        current_profile = st.session_state.get('user_profile', {})
+        
+        # 환영 메시지 생성 또는 업데이트
         if not st.session_state.messages:
+            # 첫 실행 시 환영 메시지 생성
             welcome_message = self._generate_welcome_message()
             st.session_state.messages.append({"role": "assistant", "content": welcome_message})
+        else:
+            # 기존 메시지가 있으면 첫 번째 메시지(환영 메시지) 업데이트
+            welcome_message = self._generate_welcome_message()
+            st.session_state.messages[0] = {"role": "assistant", "content": welcome_message}
         
         # 챗봇 컨테이너
         with st.container():
@@ -370,9 +385,9 @@ class KBChatbotApp:
             # 메시지 히스토리 표시
             for message in st.session_state.messages:
                 with st.chat_message(message["role"]):
-                    st.markdown(f'<div class="message {"user-message" if message["role"] == "user" else "bot-message"}">{message["content"]}</div>', unsafe_allow_html=True)
-            
-
+                    # HTML 태그 제거 후 표시
+                    clean_content = message["content"].replace('</div>', '').replace('<div>', '')
+                    st.markdown(clean_content)
             
             # 사용자 입력 처리
             if prompt := st.chat_input("궁금한 점을 물어보세요!"):
@@ -381,12 +396,14 @@ class KBChatbotApp:
                 
                 # 챗봇 응답 생성
                 with st.chat_message("user"):
-                    st.markdown(f'<div class="message user-message">{prompt}</div>', unsafe_allow_html=True)
+                    st.markdown(prompt)
                 
                 with st.chat_message("assistant"):
                     with st.spinner("🤔 분석 중..."):
                         response = self._generate_response(prompt)
-                        st.markdown(f'<div class="message bot-message">{response}</div>', unsafe_allow_html=True)
+                        # HTML 태그 제거 후 표시
+                        clean_response = response.replace('</div>', '').replace('<div>', '')
+                        st.markdown(clean_response)
                         st.session_state.messages.append({"role": "assistant", "content": response})
             
             st.markdown('</div>', unsafe_allow_html=True)
@@ -399,7 +416,7 @@ class KBChatbotApp:
         mpti_type = user_profile.get('mpti_type', 'Fact')
         
         welcome = f"""
-        안녕하세요! 🏦 KB ETF 챗봇입니다.
+        안녕하세요! 🏦 KB 챗봇입니다.
         
         현재 설정:
         - 투자 경험: Level {level} ({self._get_level_description(level)})
@@ -410,7 +427,6 @@ class KBChatbotApp:
         📊 ETF 추천 및 분석
         📈 시장 상황 분석
         🔍 ETF 비교 분석
-        📋 포트폴리오 구성
         💡 투자 전략 제안
         
         무엇을 도와드릴까요?
@@ -438,6 +454,10 @@ class KBChatbotApp:
             # MPTI 스타일 적용
             mpti_type = user_profile.get('mpti_type', 'Fact')
             styled_response = self._apply_mpti_style(response, mpti_type)
+            
+            # "다양한 관점" 문구 제거
+            styled_response = styled_response.replace("다양한 관점에서 분석한 결과입니다.", "")
+            styled_response = styled_response.replace("다양한 관점에서 분석한 결과입니다", "")
             
             return styled_response
             
@@ -516,13 +536,20 @@ class KBChatbotApp:
 
 {recommendations}
 
+**중요: 반드시 모든 추천 ETF를 개별적으로 설명해주세요!**
+
 설명 요구사항:
 1. 사용자 레벨에 맞는 어투와 깊이로 작성
 2. 투자 성향({wmti_desc})에 맞는 관점에서 분석
 3. {mpti_style['name']} 스타일로 설명 ({mpti_style['description']})
-4. 구체적인 수치와 근거 포함
-5. 실전 투자 팁과 주의사항 포함
-6. 사용자 레벨에 맞는 투자 전략 제시
+4. 모든 추천 ETF를 개별적으로 설명 (1개씩 번호를 매겨서: 1. ETF명, 2. ETF명, 3. ETF명)
+5. 각 ETF의 구체적인 근거를 반드시 포함:
+   - 수익률 점수, 위험조정수익률 점수, 비용효율성 점수 등 구체적 수치
+   - 총보수, 변동성, 거래량 등 실제 데이터
+   - 왜 이 ETF가 추천되는지 명확한 이유 제시
+6. 사용자 레벨에 맞는 실전 투자 팁과 주의사항 포함
+
+반드시 모든 ETF를 빠짐없이 설명해주세요!
 
 사용자의 투자 성향과 설명 스타일에 맞춰 개인화된 추천을 제공해주세요."""
                 
@@ -559,7 +586,7 @@ class KBChatbotApp:
             self._display_comparison_visualizations(comparison_result)
             
             # 개인화된 비교 분석 응답 생성
-            level = user_profile.get('level', 3)
+            level = user_profile.get('level', 1)
             wmti_type = user_profile.get('wmti_type', 'IBMC')
             mpti_type = user_profile.get('mpti_type', 'Fact')
             
@@ -626,28 +653,18 @@ class KBChatbotApp:
             wmti_desc = Config.WMTI_TYPE_DESCRIPTIONS[wmti_type]['name']
             mpti_style = Config.MPTI_STYLES[mpti_type]
             
-            personalized_analysis_prompt = f"""{level_prompt}
-
-사용자 프로필:
-- 투자 경험: Level {level} ({self._get_level_description(level)})
-- 투자 성향: {wmti_desc}
-- 설명 스타일: {mpti_style['name']} - {mpti_style['prompt']}
-
-다음 ETF 분석 결과를 사용자 프로필에 맞춰 설명해주세요:
+            # 간결한 프롬프트로 변경
+            personalized_analysis_prompt = f"""Level {level} 투자자, {wmti_desc} 성향, {mpti_style['name']} 스타일로 다음 ETF를 분석해주세요:
 
 {analysis_result}
 
-설명 요구사항:
-1. 사용자 레벨에 맞는 어투와 깊이로 작성
-2. 투자 성향({wmti_desc})에 맞는 관점에서 분석
-3. {mpti_style['name']} 스타일로 설명 ({mpti_style['description']})
-4. 공식 데이터(수익률, 보수, 자산규모, 거래량)와 시세 데이터(수익률, 변동성, 최대낙폭)를 모두 활용
-5. 구체적인 수치와 근거 포함
-6. 실전 투자 팁과 예시, 비유 포함
-7. 투자 위험 고지 포함
-8. 사용자 레벨에 맞는 투자 전략 제시
-
-사용자의 투자 성향과 설명 스타일에 맞춰 개인화된 ETF 분석을 제공해주세요."""
+핵심 요구사항:
+- 레벨 {level}에 맞는 설명
+- {wmti_desc} 관점에서 분석
+- {mpti_style['name']} 스타일 적용
+- 공식 데이터(수익률/보수/자산규모)와 시세 데이터(수익률/변동성/최대낙폭)를 구분해서 설명
+- 구체적 수치와 투자 팁 포함
+- 데이터 출처를 명확히 구분 (공식 vs 시세)"""
             
             response = self.gpt_client.generate_response(personalized_analysis_prompt)
             
@@ -820,8 +837,8 @@ class KBChatbotApp:
                         text += "\n\n**상세 분석:** 위 결과는 기술적 지표, 기본적 분석, 시장 동향을 종합적으로 고려한 것입니다."
                 
                 elif mpti_type == 'Extensive':
-                    if "다양한 관점" not in text:
-                        text += "\n\n**다양한 관점:** 이 외에도 다른 섹터와의 비교, 글로벌 시장 동향, 정책적 요인 등도 고려해볼 수 있습니다."
+                    # 다양한 관점 문구 자동 추가 제거
+                    pass
                 
                 elif mpti_type == 'Intensive':
                     if "**핵심**" not in text:

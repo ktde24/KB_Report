@@ -42,15 +42,32 @@ class ETFRecommendationEngine:
         Args:
             user_profile: 사용자 프로필 {'level': int, 'wmti_type': str}
             cache_df: 사전 계산된 ETF 캐시 데이터
-            category_keyword: 카테고리 키워드 (예: "반도체")
+            category_keyword: 카테고리 키워드
             top_n: 추천할 ETF 개수
         
         Returns:
             추천 ETF 리스트 (Dict 형태)
         """
         try:
+            # 캐시 데이터에서 중복 제거 (종목코드 기준)
+            cache_df = cache_df.drop_duplicates(subset=['종목코드'], keep='first')
+            logger.info(f"캐시 데이터 중복 제거 후: {len(cache_df)}개")
+            
+            logger.info(f"추천 시작: 키워드='{category_keyword}', top_n={top_n}, 사용자레벨={user_profile.get('level')}")
+            logger.info(f"캐시 데이터 총 개수: {len(cache_df)}")
+            
             # 1단계: 카테고리 필터링
             filtered = self._filter_by_category(cache_df, category_keyword)
+            
+            # 기초지수 기준 중복 제거 (같은 지수를 추종하는 ETF 중복 방지)
+            before_dedup = len(filtered)
+            if '기초지수' in filtered.columns:
+                # 기초지수 이름 정규화 (공백, 괄호, 특수문자 제거)
+                filtered['기초지수_정규화'] = filtered['기초지수'].str.replace(r'[\(\)\s]', '', regex=True).str.lower()
+                filtered = filtered.drop_duplicates(subset=['기초지수_정규화'], keep='first')
+                filtered = filtered.drop(columns=['기초지수_정규화'])
+                logger.info(f"기초지수 기준 중복 제거: {before_dedup} → {len(filtered)}개")
+            
             if filtered.empty:
                 logger.warning(f"카테고리 '{category_keyword}'에 해당하는 ETF가 없습니다.")
                 return [{
@@ -68,10 +85,12 @@ class ETFRecommendationEngine:
 
             # 3단계: WMTI 투자자 유형별 점수 계산 및 정렬
             scored_etfs = self._calculate_wmti_scores(filtered, user_profile)
+            
             top_etfs = scored_etfs.head(top_n)
             
             wmti_type = user_profile.get('wmti_type', 'ABWC')
             logger.info(f"WMTI {wmti_type} 유형 기반 추천 완료: {len(top_etfs)}개 ETF")
+            logger.info(f"추천된 ETF들: {list(top_etfs['종목명'])}")
             return top_etfs.to_dict('records')
         
         except Exception as e:
@@ -115,6 +134,10 @@ class ETFRecommendationEngine:
         user_level = self._normalize_user_level(user_profile.get('level'))
         risk_limit = self.config.get_risk_tier_limit(user_level)
 
+        logger.info(f"사용자 레벨 필터링 시작: Level {user_level}, Risk Tier ≤ {risk_limit}")
+        logger.info(f"필터링 전 ETF 개수: {len(cache_df)}")
+        logger.info(f"사용 가능한 컬럼: {list(cache_df.columns)}")
+
         # 타입 강제 변환
         cache_df = cache_df.copy()
         cache_df['level'] = cache_df['level'].astype(int)
@@ -126,11 +149,16 @@ class ETFRecommendationEngine:
                 (cache_df['level'] == user_level) &
                 (cache_df['risk_tier'] <= risk_limit)
             ]
+            logger.info(f"위험도 필터링 적용: Level {user_level} AND Risk Tier ≤ {risk_limit}")
         else:
             # risk_tier가 없는 경우 레벨만 필터링
             filtered = cache_df[cache_df['level'] == user_level]
+            logger.info(f"위험도 필터링 없음: Level {user_level}만 적용")
         
-        logger.info(f"사용자 레벨 필터링: Level {user_level}, Risk Tier ≤ {risk_limit} → {len(filtered)}개")
+        logger.info(f"사용자 레벨 필터링 완료: {len(filtered)}개 ETF")
+        if len(filtered) > 0:
+            logger.info(f"필터링된 ETF들: {list(filtered['종목명'])}")
+        
         return filtered
 
     def _normalize_user_level(self, user_level: Any) -> int:

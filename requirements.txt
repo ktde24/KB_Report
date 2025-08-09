@@ -28,8 +28,9 @@ chardet>=5.0.0
 # 한국 주식 데이터
 pykrx>=1.0.0
 
+# 실시간 시장 데이터
+yfinance>=0.2.0
+
 # Jupyter 환경 (IPython)
 ipython>=8.0.0
 
-# 동시성 처리 (캐시 생성용)
-# concurrent.futures는 Python 표준 라이브러리이므로 별도 설치 불필요

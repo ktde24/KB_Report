@@ -494,13 +494,18 @@ def safe_read_csv(file_path: str, **kwargs) -> pd.DataFrame:
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_path}")
     
+    # kwargs에서 encoding 제거 (중복 방지)
+    kwargs_copy = kwargs.copy()
+    if 'encoding' in kwargs_copy:
+        del kwargs_copy['encoding']
+    
     # 시도할 인코딩 목록
     encodings = ['utf-8-sig', 'utf-8', 'cp949', 'euc-kr']
     
     for encoding in encodings:
         try:
             logger.info(f"CSV 파일 읽기 시도: {file_path} (인코딩: {encoding})")
-            df = pd.read_csv(file_path, encoding=encoding, **kwargs)
+            df = pd.read_csv(file_path, encoding=encoding, **kwargs_copy)
             logger.info(f"CSV 파일 읽기 성공: {file_path} (인코딩: {encoding})")
             return df
         except UnicodeDecodeError as e:

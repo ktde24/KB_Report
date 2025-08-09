@@ -65,8 +65,8 @@ class GPTClient:
             self.api_key = os.getenv("OPENAI_API_KEY", "")
         
         # GPT 모델 설정
-        self.model = "gpt-4o-mini"  # GPT 모델명
-        self.max_tokens = 1500  # 최대 토큰 수
+        self.model = "gpt-3.5-turbo"  # 모델 변경
+        self.max_tokens = 800  # 토큰 수 감소 
         
         # OpenAI 클라이언트 객체
         self.client = None
@@ -440,4 +440,249 @@ ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 
             
         except Exception as e:
             logger.error(f"대체 응답 생성 중 오류: {e}")
-            return "⚠️ API 할당량 초과로 인해 상세 분석을 제공할 수 없습니다. 잠시 후 다시 시도해주세요." 
+            return "API 할당량 초과로 인해 상세 분석을 제공할 수 없습니다. 잠시 후 다시 시도해주세요." 
+
+    def generate_market_interpretation(self, market_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
+        """
+        시장 해석 생성
+        
+        Args:
+            market_data: 시장 데이터 (지수 변동률 등)
+            user_profile: 사용자 프로필 (level, investor_type)
+        
+        Returns:
+            str: 레벨별 맞춤 시장 해석
+        """
+        try:
+            # 시스템 프롬프트 생성
+            system_prompt = self.config.get_system_prompt(user_profile)
+            
+            # 사용자 프롬프트 생성
+            user_prompt = f"""
+다음 시장 데이터를 바탕으로 사용자의 투자 레벨과 MPTI 유형에 맞는 시장 해석을 제공해주세요.
+
+시장 데이터:
+- KOSPI 변동률: {market_data.get('kospi_change', 0)}%
+- KOSDAQ 변동률: {market_data.get('kosdaq_change', 0)}%
+- S&P 500 변동률: {market_data.get('sp500_change', 0)}%
+- NASDAQ 변동률: {market_data.get('nasdaq_change', 0)}%
+- 날짜: {market_data.get('date', '')}
+
+사용자 정보:
+- 투자 레벨: {user_profile.get('level', 1)}
+- MPTI 유형: {user_profile.get('investor_type', 'Fact')}
+
+요구사항:
+1. 사용자의 투자 레벨에 맞는 어투와 깊이로 작성
+2. MPTI 유형에 맞는 설명 스타일 적용
+3. 구체적인 수치와 근거 포함
+4. 실전 투자 팁과 예시 포함
+5. 투자 위험 고지 포함
+6. 1-2줄로 간결하게 작성
+
+시장 해석을 제공해주세요.
+"""
+            
+            # API 호출
+            response = self._call_api(system_prompt, user_prompt)
+            
+            if response:
+                return response
+            else:
+                return self._generate_fallback_market_interpretation(market_data, user_profile)
+                
+        except Exception as e:
+            logger.error(f"시장 해석 생성 중 오류: {e}")
+            return self._generate_fallback_market_interpretation(market_data, user_profile)
+    
+    def _generate_fallback_market_interpretation(self, market_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
+        """GPT API 실패 시 기본 시장 해석 생성"""
+        level = user_profile.get('level', 1)
+        mpti_type = user_profile.get('investor_type', 'Fact')
+        
+        kospi_change = market_data.get('kospi_change', 0)
+        kosdaq_change = market_data.get('kosdaq_change', 0)
+        
+        if level == 1:
+            base_text = f"오늘 시장은 조금 움직였어요. 코스피는 {kospi_change}% {'올랐' if kospi_change > 0 else '내려갔'}고, 코스닥은 {kosdaq_change}% {'올랐' if kosdaq_change > 0 else '내려갔'}답니다."
+        elif level == 2:
+            base_text = f"오늘 시장은 소폭 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 시장이 안정적인 흐름을 보였습니다."
+        elif level == 3:
+            base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 글로벌 시장 동향과 연관성을 보였습니다."
+        elif level == 4:
+            base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 지지/저항선에서의 움직임을 보였습니다."
+        else:
+            base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 분석과 기본적 요인이 복합적으로 작용했습니다."
+        
+        # MPTI 스타일 적용
+        if mpti_type == 'Fact':
+            return f"**데이터 기반 분석:** {base_text}"
+        elif mpti_type == 'Opinion':
+            return f"**전문가 관점:** {base_text}"
+        elif mpti_type == 'Intensive':
+            return f"**핵심:** {base_text}"
+        elif mpti_type == 'Skimming':
+            return f"**요약:** {base_text}"
+        else:
+            return base_text 
+
+    def generate_portfolio_analysis(self, portfolio_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
+        """
+        포트폴리오 분석 생성
+        
+        Args:
+            portfolio_data: 포트폴리오 데이터
+            user_profile: 사용자 프로필
+        
+        Returns:
+            str: 레벨별 맞춤 포트폴리오 분석
+        """
+        try:
+            system_prompt = self.config.get_system_prompt(user_profile)
+            
+            user_prompt = f"""
+다음 ETF 포트폴리오 데이터를 바탕으로 사용자의 투자 레벨과 MPTI 유형에 맞는 분석을 제공해주세요.
+
+포트폴리오 데이터:
+- ETF명: {portfolio_data.get('etf_name', '')}
+- 최대 비중 종목: {list(portfolio_data.get('top_holdings', {}).keys())[0] if portfolio_data.get('top_holdings') else 'N/A'}
+- 최대 비중: {list(portfolio_data.get('top_holdings', {}).values())[0] if portfolio_data.get('top_holdings') else 0}%
+- 상위 종목 집중도: {portfolio_data.get('concentration', 0):.1f}%
+
+사용자 정보:
+- 투자 레벨: {user_profile.get('level', 1)}
+- MPTI 유형: {user_profile.get('investor_type', 'Fact')}
+
+요구사항:
+1. 사용자의 투자 레벨에 맞는 어투와 깊이로 작성
+2. MPTI 유형에 맞는 설명 스타일 적용
+3. 포트폴리오 집중도와 위험도 분석
+4. 투자 시 주의사항 포함
+5. 1-2줄로 간결하게 작성
+
+포트폴리오 분석을 제공해주세요.
+"""
+            
+            response = self._call_api(system_prompt, user_prompt)
+            
+            if response:
+                return response
+            else:
+                return self._generate_fallback_portfolio_analysis(portfolio_data, user_profile)
+                
+        except Exception as e:
+            logger.error(f"포트폴리오 분석 생성 중 오류: {e}")
+            return self._generate_fallback_portfolio_analysis(portfolio_data, user_profile)
+    
+    def generate_price_analysis(self, price_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
+        """
+        시세 분석 생성
+        
+        Args:
+            price_data: 시세 데이터
+            user_profile: 사용자 프로필
+        
+        Returns:
+            str: 레벨별 맞춤 시세 분석
+        """
+        try:
+            system_prompt = self.config.get_system_prompt(user_profile)
+            
+            user_prompt = f"""
+다음 시세 데이터를 바탕으로 사용자의 투자 레벨과 MPTI 유형에 맞는 분석을 제공해주세요.
+
+시세 데이터:
+- 종목명: {price_data.get('stock_name', '')}
+- 최신 종가: {price_data.get('latest_price', 0):,.0f}원
+- 변동률: {price_data.get('change_percent', 0):+.1f}%
+- 최고가: {price_data.get('high', 0):,.0f}원
+- 최저가: {price_data.get('low', 0):,.0f}원
+- 평균 거래량: {price_data.get('volume', 0):,.0f}주
+
+사용자 정보:
+- 투자 레벨: {user_profile.get('level', 1)}
+- MPTI 유형: {user_profile.get('investor_type', 'Fact')}
+
+요구사항:
+1. 사용자의 투자 레벨에 맞는 어투와 깊이로 작성
+2. MPTI 유형에 맞는 설명 스타일 적용
+3. 가격 변동과 거래량 분석
+4. 투자 시 주의사항 포함
+5. 1-2줄로 간결하게 작성
+
+시세 분석을 제공해주세요.
+"""
+            
+            response = self._call_api(system_prompt, user_prompt)
+            
+            if response:
+                return response
+            else:
+                return self._generate_fallback_price_analysis(price_data, user_profile)
+                
+        except Exception as e:
+            logger.error(f"시세 분석 생성 중 오류: {e}")
+            return self._generate_fallback_price_analysis(price_data, user_profile)
+    
+    def _generate_fallback_portfolio_analysis(self, portfolio_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
+        """GPT API 실패 시 기본 포트폴리오 분석 생성"""
+        level = user_profile.get('level', 1)
+        mpti_type = user_profile.get('investor_type', 'Fact')
+        
+        etf_name = portfolio_data.get('etf_name', '')
+        concentration = portfolio_data.get('concentration', 0)
+        
+        if level == 1:
+            base_text = f"{etf_name}는 여러 종목을 모아놓은 상자예요. 상위 종목들이 전체의 {concentration:.1f}%를 차지하고 있어요!"
+        elif level == 2:
+            base_text = f"{etf_name}의 포트폴리오를 분석해보면, 상위 종목들이 전체의 {concentration:.1f}%를 차지하여 비교적 집중도가 높은 편입니다."
+        elif level == 3:
+            base_text = f"{etf_name}의 포트폴리오 분석 결과, 상위 종목들의 집중도가 {concentration:.1f}%로 높은 편이며, 이는 특정 섹터에 집중 투자하는 특성을 보여줍니다."
+        elif level == 4:
+            base_text = f"{etf_name}의 포트폴리오 분석 결과, 상위 종목들의 집중도가 {concentration:.1f}%로 높은 편이며, 이는 특정 섹터나 테마에 집중 투자하는 특성을 보여줍니다."
+        else:
+            base_text = f"{etf_name}의 포트폴리오 분석 결과, 상위 종목들의 집중도가 {concentration:.1f}%로 높은 편이며, 이는 특정 섹터나 테마에 집중 투자하는 특성을 보여줍니다. 투자 시 분산 투자의 중요성을 고려해야 합니다."
+        
+        # MPTI 스타일 적용
+        if mpti_type == 'Fact':
+            return f"**데이터 기반 분석:** {base_text}"
+        elif mpti_type == 'Opinion':
+            return f"**전문가 관점:** {base_text}"
+        elif mpti_type == 'Intensive':
+            return f"**핵심:** {base_text}"
+        elif mpti_type == 'Skimming':
+            return f"**요약:** {base_text}"
+        else:
+            return base_text
+    
+    def _generate_fallback_price_analysis(self, price_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
+        """GPT API 실패 시 기본 시세 분석 생성"""
+        level = user_profile.get('level', 1)
+        mpti_type = user_profile.get('investor_type', 'Fact')
+        
+        stock_name = price_data.get('stock_name', '')
+        latest_price = price_data.get('latest_price', 0)
+        change_percent = price_data.get('change_percent', 0)
+        
+        if level == 1:
+            base_text = f"{stock_name}는 어제 {latest_price:,.0f}원으로 마감했어요. 전날보다 {change_percent:+.1f}% 변동했답니다!"
+        elif level == 2:
+            base_text = f"{stock_name}의 최근 5거래일 추이를 보면, 어제 종가 {latest_price:,.0f}원으로 전일 대비 {change_percent:+.1f}% 변동했습니다."
+        elif level == 3:
+            base_text = f"{stock_name}의 최근 5거래일 분석 결과, 어제 종가 {latest_price:,.0f}원으로 전일 대비 {change_percent:+.1f}% 변동했습니다."
+        elif level == 4:
+            base_text = f"{stock_name}의 최근 5거래일 분석 결과, 어제 종가 {latest_price:,.0f}원으로 전일 대비 {change_percent:+.1f}% 변동했습니다. 기술적 지표를 참고하여 투자 판단을 하시기 바랍니다."
+        else:
+            base_text = f"{stock_name}의 최근 5거래일 분석 결과, 어제 종가 {latest_price:,.0f}원으로 전일 대비 {change_percent:+.1f}% 변동했습니다. 기술적 지표와 기본적 분석을 종합하여 투자 판단을 하시기 바랍니다."
+        
+        # MPTI 스타일 적용
+        if mpti_type == 'Fact':
+            return f"**데이터 기반 분석:** {base_text}"
+        elif mpti_type == 'Opinion':
+            return f"**전문가 관점:** {base_text}"
+        elif mpti_type == 'Intensive':
+            return f"**핵심:** {base_text}"
+        elif mpti_type == 'Skimming':
+            return f"**요약:** {base_text}"
+        else:
+            return base_text 

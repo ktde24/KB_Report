@@ -54,8 +54,11 @@ class ETFCacheGenerator:
             # 3. 객관적 점수 계산
             scored_data = self._calculate_objective_scores(merged_data)
             
-            # 4. 레벨별 필터링
-            final_data = self._apply_level_filters(scored_data)
+            # 4. WMTI 타입별 점수 계산
+            wmti_scored_data = self._calculate_wmti_type_scores(scored_data)
+            
+            # 5. 레벨별 필터링
+            final_data = self._apply_level_filters(wmti_scored_data)
             
             logger.info(f"캐시 데이터 생성 완료: {len(final_data)}개 ETF")
             return final_data
@@ -122,9 +125,23 @@ class ETFCacheGenerator:
             file_path = self.data_paths['risk_tier']
             df = pd.read_csv(file_path, encoding='utf-8', low_memory=False)
             # 필요한 컬럼만 선택 (종목코드, 종목명, risk_tier)
-            if 'itmsNm' in df.columns and 'risk_tier' in df.columns:
+            if '종목명' in df.columns and 'risk_tier' in df.columns:
+                df = df[['종목명', 'risk_tier']].copy()
+            elif 'itmsNm' in df.columns and 'risk_tier' in df.columns:
                 df = df[['itmsNm', 'risk_tier']].copy()
                 df.columns = ['종목명', 'risk_tier']
+            else:
+                # risk_tier 컬럼이 없으면 기본값 설정
+                if '종목명' in df.columns:
+                    df = df[['종목명']].copy()
+                    df['risk_tier'] = 3  # 기본값
+                else:
+                    logger.warning("risk_tier 데이터에서 필요한 컬럼을 찾을 수 없습니다.")
+                    return pd.DataFrame()
+            
+            # 중복 제거 (종목명 기준)
+            df = df.drop_duplicates(subset=['종목명'], keep='first')
+            
             logger.info(f"ETF 위험등급 데이터 로드: {len(df)}개")
             return df
         except Exception as e:

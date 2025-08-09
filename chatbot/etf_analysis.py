@@ -299,11 +299,20 @@ def plot_etf_bar(etf_info: Dict[str, Any]) -> go.Figure:
     try:
         market_data = etf_info.get('시세분석', {})
         
+        # 디버깅: 시세 데이터 확인
+        logger.info(f"시세 분석 데이터: {market_data}")
+        
         # 차트 데이터 준비
         metrics = ['3개월 수익률', '1년 수익률', '변동성', '최대낙폭']
         labels = ['3개월 수익률(%)', '1년 수익률(%)', '변동성(%)', '최대낙폭(%)']
         values = [market_data.get(metric, 0) or 0 for metric in metrics]
         colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+        
+        # 디버깅: 각 지표별 값 확인
+        for i, metric in enumerate(metrics):
+            raw_value = market_data.get(metric)
+            final_value = values[i]
+            logger.info(f"{metric}: 원본값={raw_value}, 최종값={final_value}")
         
         # 바 차트 생성
         fig = go.Figure()
@@ -352,10 +361,19 @@ def plot_etf_summary_bar(etf_info: Dict[str, Any]) -> go.Figure:
         # 데이터 수집 및 검증
         chart_data = []
         
-        # 공식 1년 수익률
-        official_return = safe_float(performance_data.get('수익률'))
+        # 공식 1년 수익률 - 여러 컬럼명 시도
+        official_return = None
+        perf_keys = ['수익률', '1년수익률', '1년 수익률', '수익률(%)', '1년수익률(%)']
+        for key in perf_keys:
+            official_return = safe_float(performance_data.get(key))
+            if official_return is not None:
+                break
+        
         if official_return is not None:
             chart_data.append(('공식 1년 수익률(%)', official_return, '#1f77b4'))
+            logger.info(f"공식 수익률 데이터: {official_return}%")
+        else:
+            logger.warning(f"공식 수익률 데이터를 찾을 수 없습니다. 사용 가능한 키: {list(performance_data.keys())}")
         
         # 총 보수
         total_fee = safe_float(performance_data.get('총 보수'))
@@ -374,6 +392,8 @@ def plot_etf_summary_bar(etf_info: Dict[str, Any]) -> go.Figure:
         
         # 디버깅: 데이터 확인
         logger.info(f"차트 데이터: {chart_data}")
+        logger.info(f"성능 데이터 키: {list(performance_data.keys())}")
+        logger.info(f"자산 데이터 키: {list(aum_data.keys())}")
         
         # 차트 생성
         fig = go.Figure()
@@ -395,7 +415,13 @@ def plot_etf_summary_bar(etf_info: Dict[str, Any]) -> go.Figure:
             
             # Y축 범위 설정 (데이터에 따라 동적 조정)
             max_val = max(values) if values else 1
-            y_range = [0, max_val * 1.2] if max_val > 0 else [0, 1]
+            min_val = min(values) if values else 0
+            
+            # 음수 값이 있는 경우 Y축 범위 조정
+            if min_val < 0:
+                y_range = [min_val * 1.2, max_val * 1.2]
+            else:
+                y_range = [0, max_val * 1.2] if max_val > 0 else [0, 1]
             
             fig.update_layout(
                 title=f"{etf_info.get('ETF명', 'ETF')} 공식 데이터 요약",

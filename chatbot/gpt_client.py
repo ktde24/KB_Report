@@ -54,15 +54,19 @@ class GPTClient:
         """
         GPT 클라이언트 초기화
         
-        Streamlit 세션에서 API 키를 가져와 OpenAI 클라이언트를 초기화합니다.
+        환경변수에서 API 키를 가져와 OpenAI 클라이언트를 초기화합니다.
         API 키가 없거나 라이브러리가 설치되지 않은 경우 기본 설정으로 동작합니다.
         """
-        # Streamlit 세션에서 API 키 가져오기
-        self.api_key = st.session_state.get("gpt_api_key", "")
+        # 환경 변수에서 API 키 가져오기 (우선순위: 환경변수 > Streamlit 세션)
+        self.api_key = os.getenv("OPENAI_API_KEY", "")
         
-        # 환경 변수에서도 확인
+        # Streamlit 세션에서도 확인 (환경변수가 없는 경우)
         if not self.api_key:
-            self.api_key = os.getenv("OPENAI_API_KEY", "")
+            try:
+                import streamlit as st
+                self.api_key = st.session_state.get("gpt_api_key", "")
+            except ImportError:
+                pass
         
         # GPT 모델 설정
         self.model = "gpt-3.5-turbo"  # 모델 변경
@@ -72,7 +76,11 @@ class GPTClient:
         self.client = None
         
         # 설정 관리 객체
-        self.config = Config()
+        try:
+            self.config = Config()
+        except Exception as e:
+            logger.error(f"Config 초기화 실패: {e}")
+            self.config = None
         
         # OpenAI 클라이언트 초기화 시도
         if self.api_key and openai:
@@ -85,7 +93,7 @@ class GPTClient:
                 self.client = None
         else:
             if not self.api_key:
-                logger.warning("GPT API 키가 설정되지 않았습니다.")
+                logger.warning("GPT API 키가 설정되지 않았습니다. .env 파일에 OPENAI_API_KEY를 설정하거나 Streamlit 세션에 gpt_api_key를 설정하세요.")
             if not openai:
                 logger.warning("OpenAI 라이브러리가 설치되지 않았습니다.")
 
@@ -96,7 +104,7 @@ class GPTClient:
         Returns:
             bool: API 키와 클라이언트가 모두 설정되었는지 여부
         """
-        return bool(self.api_key and self.client)
+        return bool(self.api_key and self.client and openai and len(self.api_key.strip()) > 0)
 
     def generate_response(self, prompt: str = None, system_prompt: str = None, user_prompt: str = None, max_tokens: Optional[int] = None) -> str:
         """
@@ -454,12 +462,38 @@ ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 
             str: 레벨별 맞춤 시장 해석
         """
         try:
-            # 시스템 프롬프트 생성
-            system_prompt = self.config.get_system_prompt(user_profile)
+            # MPTI 스타일 프롬프트 가져오기
+            mpti_type = user_profile.get('investor_type', 'Fact')
+            if self.config:
+                mpti_styles = getattr(self.config, 'MPTI_STYLES', {})
+                mpti_prompt = mpti_styles.get(mpti_type, {}).get('prompt', '일반적으로 설명해주세요.')
+                
+                # 레벨별 프롬프트 가져오기
+                level = user_profile.get('level', 1)
+                level_prompts = getattr(self.config, 'LEVEL_PROMPTS', {})
+                level_prompt = level_prompts.get(level, level_prompts.get(3, ""))
+            else:
+                mpti_prompt = '일반적으로 설명해주세요.'
+                level_prompt = '일반적인 수준으로 설명해주세요.'
+            
+            # 시스템 프롬프트 생성 (MPTI 프롬프트 포함)
+            system_prompt = f"""당신은 한국 주식시장 전문 분석가입니다. 
+
+{level_prompt}
+
+{mpti_prompt}
+
+시장 데이터를 분석할 때는 다음 원칙을 따라주세요:
+1. 사용자의 투자 레벨에 맞는 어투와 깊이로 작성
+2. MPTI 유형에 맞는 설명 스타일을 자연스럽게 적용
+3. 구체적인 수치와 근거 포함
+4. 실전 투자 팁과 예시 포함
+5. 투자 위험 고지 포함
+6. 1-2줄로 간결하게 작성"""
             
             # 사용자 프롬프트 생성
             user_prompt = f"""
-다음 시장 데이터를 바탕으로 사용자의 투자 레벨과 MPTI 유형에 맞는 시장 해석을 제공해주세요.
+다음 시장 데이터를 바탕으로 시장 해석을 제공해주세요.
 
 시장 데이터:
 - KOSPI 변동률: {market_data.get('kospi_change', 0)}%
@@ -468,25 +502,13 @@ ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 
 - NASDAQ 변동률: {market_data.get('nasdaq_change', 0)}%
 - 날짜: {market_data.get('date', '')}
 
-사용자 정보:
-- 투자 레벨: {user_profile.get('level', 1)}
-- MPTI 유형: {user_profile.get('investor_type', 'Fact')}
-
-요구사항:
-1. 사용자의 투자 레벨에 맞는 어투와 깊이로 작성
-2. MPTI 유형에 맞는 설명 스타일 적용
-3. 구체적인 수치와 근거 포함
-4. 실전 투자 팁과 예시 포함
-5. 투자 위험 고지 포함
-6. 1-2줄로 간결하게 작성
-
 시장 해석을 제공해주세요.
 """
             
             # API 호출
-            response = self._call_api(system_prompt, user_prompt)
+            response = self.generate_response(system_prompt=system_prompt, user_prompt=user_prompt)
             
-            if response:
+            if response and not response.startswith("⚠️"):
                 return response
             else:
                 return self._generate_fallback_market_interpretation(market_data, user_profile)
@@ -497,34 +519,74 @@ ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 
     
     def _generate_fallback_market_interpretation(self, market_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
         """GPT API 실패 시 기본 시장 해석 생성"""
-        level = user_profile.get('level', 1)
-        mpti_type = user_profile.get('investor_type', 'Fact')
-        
-        kospi_change = market_data.get('kospi_change', 0)
-        kosdaq_change = market_data.get('kosdaq_change', 0)
-        
-        if level == 1:
-            base_text = f"오늘 시장은 조금 움직였어요. 코스피는 {kospi_change}% {'올랐' if kospi_change > 0 else '내려갔'}고, 코스닥은 {kosdaq_change}% {'올랐' if kosdaq_change > 0 else '내려갔'}답니다."
-        elif level == 2:
-            base_text = f"오늘 시장은 소폭 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 시장이 안정적인 흐름을 보였습니다."
-        elif level == 3:
-            base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 글로벌 시장 동향과 연관성을 보였습니다."
-        elif level == 4:
-            base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 지지/저항선에서의 움직임을 보였습니다."
-        else:
-            base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 분석과 기본적 요인이 복합적으로 작용했습니다."
-        
-        # MPTI 스타일 적용
-        if mpti_type == 'Fact':
-            return f"**데이터 기반 분석:** {base_text}"
-        elif mpti_type == 'Opinion':
-            return f"**전문가 관점:** {base_text}"
-        elif mpti_type == 'Intensive':
-            return f"**핵심:** {base_text}"
-        elif mpti_type == 'Skimming':
-            return f"**요약:** {base_text}"
-        else:
-            return base_text 
+        try:
+            # MPTI 스타일 프롬프트 가져오기
+            mpti_type = user_profile.get('investor_type', 'Fact')
+            if self.config:
+                mpti_styles = getattr(self.config, 'MPTI_STYLES', {})
+                mpti_prompt = mpti_styles.get(mpti_type, {}).get('prompt', '일반적으로 설명해주세요.')
+            else:
+                mpti_prompt = '일반적으로 설명해주세요.'
+            
+            level = user_profile.get('level', 1)
+            kospi_change = market_data.get('kospi_change', 0)
+            kosdaq_change = market_data.get('kosdaq_change', 0)
+            
+            if level == 1:
+                base_text = f"오늘 시장은 조금 움직였어요. 코스피는 {kospi_change}% {'올랐' if kospi_change > 0 else '내려갔'}고, 코스닥은 {kosdaq_change}% {'올랐' if kosdaq_change > 0 else '내려갔'}답니다."
+            elif level == 2:
+                base_text = f"오늘 시장은 소폭 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 시장이 안정적인 흐름을 보였습니다."
+            elif level == 3:
+                base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 글로벌 시장 동향과 연관성을 보였습니다."
+            elif level == 4:
+                base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 지지/저항선에서의 움직임을 보였습니다."
+            else:
+                base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 분석과 기본적 요인이 복합적으로 작용했습니다."
+            
+            # MPTI 프롬프트에 따라 스타일 적용
+            if '객관적' in mpti_prompt or '팩트' in mpti_prompt:
+                return f"**데이터 기반 분석:** {base_text}"
+            elif '전문가' in mpti_prompt or '오피니언' in mpti_prompt:
+                return f"**전문가 관점:** {base_text}"
+            elif '핵심' in mpti_prompt or '집중' in mpti_prompt:
+                return f"**핵심:** {base_text}"
+            elif '요약' in mpti_prompt or '간단' in mpti_prompt:
+                return f"**요약:** {base_text}"
+            elif '상세' in mpti_prompt or '깊이' in mpti_prompt:
+                return f"**상세 분석:** {base_text}"
+            else:
+                return base_text
+                
+        except Exception as e:
+            # Config 접근 실패 시 기본 로직 사용
+            level = user_profile.get('level', 1)
+            mpti_type = user_profile.get('investor_type', 'Fact')
+            
+            kospi_change = market_data.get('kospi_change', 0)
+            kosdaq_change = market_data.get('kosdaq_change', 0)
+            
+            if level == 1:
+                base_text = f"오늘 시장은 조금 움직였어요. 코스피는 {kospi_change}% {'올랐' if kospi_change > 0 else '내려갔'}고, 코스닥은 {kosdaq_change}% {'올랐' if kosdaq_change > 0 else '내려갔'}답니다."
+            elif level == 2:
+                base_text = f"오늘 시장은 소폭 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 시장이 안정적인 흐름을 보였습니다."
+            elif level == 3:
+                base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 글로벌 시장 동향과 연관성을 보였습니다."
+            elif level == 4:
+                base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 지지/저항선에서의 움직임을 보였습니다."
+            else:
+                base_text = f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. 코스피 {kospi_change}%, 코스닥 {kosdaq_change}% 변동으로 기술적 분석과 기본적 요인이 복합적으로 작용했습니다."
+            
+            # MPTI 스타일 적용
+            if mpti_type == 'Fact':
+                return f"**데이터 기반 분석:** {base_text}"
+            elif mpti_type == 'Opinion':
+                return f"**전문가 관점:** {base_text}"
+            elif mpti_type == 'Intensive':
+                return f"**핵심:** {base_text}"
+            elif mpti_type == 'Skimming':
+                return f"**요약:** {base_text}"
+            else:
+                return base_text 
 
     def generate_portfolio_analysis(self, portfolio_data: Dict[str, Any], user_profile: Dict[str, Any]) -> str:
         """
@@ -563,9 +625,9 @@ ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 
 포트폴리오 분석을 제공해주세요.
 """
             
-            response = self._call_api(system_prompt, user_prompt)
+            response = self.generate_response(system_prompt=system_prompt, user_prompt=user_prompt)
             
-            if response:
+            if response and not response.startswith("⚠️"):
                 return response
             else:
                 return self._generate_fallback_portfolio_analysis(portfolio_data, user_profile)
@@ -613,9 +675,9 @@ ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 
 시세 분석을 제공해주세요.
 """
             
-            response = self._call_api(system_prompt, user_prompt)
+            response = self.generate_response(system_prompt=system_prompt, user_prompt=user_prompt)
             
-            if response:
+            if response and not response.startswith("⚠️"):
                 return response
             else:
                 return self._generate_fallback_price_analysis(price_data, user_profile)

@@ -3,6 +3,7 @@
 - 종목별 상세 분석
 - 뉴스 크롤링 및 감정분석
 - chatbot.etf_analysis 통합
+- ETF 구성종목 분석
 """
 
 import streamlit as st
@@ -27,6 +28,13 @@ try:
 except ImportError:
     PYKRX_AVAILABLE = False
 
+# ETF 구성종목 분석 모듈 임포트
+try:
+    from .etf_constituent_analyzer import ETFConstituentAnalyzer
+    ETF_ANALYZER_AVAILABLE = True
+except ImportError:
+    ETF_ANALYZER_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class DailyBriefing:
@@ -46,6 +54,33 @@ class DailyBriefing:
         # 첫 번째 종목에 대해 상세 분석
         main_stock = interest_list[0]
         
+        # ETF 구성종목 분석 시도
+        if ETF_ANALYZER_AVAILABLE and self._is_etf_code(main_stock):
+            try:
+                etf_analyzer = ETFConstituentAnalyzer()
+                etf_code = self._get_etf_code_from_name(main_stock)
+                
+                if etf_code:
+                    # ETF 종합 분석 리포트 생성 (MPTI 스타일 적용)
+                    analysis_result = etf_analyzer.generate_etf_summary_report(
+                        etf_code=etf_code,
+                        etf_name=main_stock,
+                        level=level,
+                        mpti_type=mpti_type
+                    )
+                    
+                    if "error" not in analysis_result:
+                        # ETF 구성종목 분석 결과 표시
+                        etf_analyzer.display_etf_analysis(analysis_result)
+                        return
+                    else:
+                        st.warning(f"ETF 분석 실패: {analysis_result['error']}")
+                
+            except Exception as e:
+                st.error(f"ETF 구성종목 분석 중 오류: {e}")
+                logger.error(f"ETF 분석 오류: {e}")
+        
+        # 기존 분석 로직 (fallback)
         try:
             # chatbot.etf_analysis의 analyze_etf 함수 활용
             if CHATBOT_MODULES_AVAILABLE and data:
@@ -345,6 +380,65 @@ class DailyBriefing:
             '086790': '하나금융지주'
         }
         return stock_names.get(code, '')
+    
+    def _is_etf_code(self, stock_name: str) -> bool:
+        """ETF 종목인지 확인"""
+        etf_keywords = ['ETF', 'KBSTAR', 'TIGER', 'KODEX', 'ARIRANG', 'HANARO', 'SMART']
+        return any(keyword in stock_name.upper() for keyword in etf_keywords)
+    
+    def _get_etf_code_from_name(self, stock_name: str) -> Optional[str]:
+        """ETF 이름에서 코드 추출"""
+        etf_code_map = {
+            # KBSTAR ETF
+            'KBSTAR 200': '091160',
+            'KBSTAR 코스닥150': '091170',
+            'KBSTAR 반도체': '091230',
+            'KBSTAR 2차전지테마': '306540',
+            'KBSTAR K-뉴딜디지털플러스': '233740',
+            
+            # TIGER ETF
+            'TIGER 반도체': '102110',
+            'TIGER 2차전지테마': '305720',
+            
+            # KODEX ETF
+            'KODEX 반도체': '091160',
+            'KODEX 2차전지': '305720',
+            
+            # ACE 반도체 ETF (실제 존재하는 반도체 ETF들)
+            'ACE AI반도체포커스': '469150',
+            'ACE 글로벌AI맞춤형반도체': '494340',
+            'ACE 글로벌반도체TOP4 Plus SOLACTIVE': '446770',
+            'ACE 엔비디아밸류체인액티브': '483320',
+            'ACE 일본반도체': '469160',
+            'ACE 미국반도체데일리타겟커버드콜(합성)': '480040',
+            
+            # 가상 이름을 실제 ETF로 매핑
+            '반도체 ETF': '469150',  # ACE AI반도체포커스로 매핑
+            'AI반도체 ETF': '469150',
+            '글로벌반도체 ETF': '446770',
+            '엔비디아 ETF': '483320',
+            '일본반도체 ETF': '469160'
+        }
+        
+        # 정확한 매칭
+        if stock_name in etf_code_map:
+            return etf_code_map[stock_name]
+        
+        # 부분 매칭 (반도체 관련 키워드)
+        if '반도체' in stock_name:
+            # 가장 대표적인 반도체 ETF로 매핑
+            return '469150'  # ACE AI반도체포커스
+        
+        # 부분 매칭
+        for name, code in etf_code_map.items():
+            if stock_name.upper() in name.upper() or name.upper() in stock_name.upper():
+                return code
+        
+        # 숫자 코드인 경우
+        if stock_name.isdigit() and len(stock_name) == 6:
+            return stock_name
+        
+        return None
     
     def _display_constituent_news(self, news_items: List[Dict], level: int, mpti_type: str):
         """구성 종목 뉴스 표시 (개선된 UI)"""

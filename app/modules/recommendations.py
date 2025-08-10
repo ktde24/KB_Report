@@ -83,6 +83,7 @@ class Recommendations:
                             
                             # 디버깅: 추천 결과 로그
                             logger.info(f"추천 결과 {i}: {rec}")
+                            logger.info(f"추천 결과 {i} 컬럼들: {list(rec.keys())}")
                             
                             # ETF 이름을 여러 필드에서 찾기
                             etf_name = (
@@ -92,6 +93,8 @@ class Recommendations:
                                 rec.get('name') or 
                                 'N/A'
                             )
+                            
+                            logger.info(f"ETF 이름 추출 결과: {etf_name}")
                             
                             # 추천 엔진 결과를 카드 형식에 맞게 변환
                             card_data = {
@@ -204,8 +207,30 @@ class Recommendations:
                     stock_code = row.get('종목코드', '')
                     realtime_data = self._get_realtime_stock_data(stock_code)
                     
+                    # ETF 이름을 여러 필드에서 찾기
+                    etf_name = None
+                    
+                    # 1. 직접적인 이름 필드들 확인
+                    name_fields = ['종목명', 'ETF명', '상품명', 'name', 'ETF이름', '상품이름']
+                    for field in name_fields:
+                        if field in row and row[field] and str(row[field]).strip() != '' and str(row[field]).strip() != 'nan':
+                            etf_name = str(row[field]).strip()
+                            break
+                    
+                    # 2. 분류체계나 기타 필드에서 이름 추출
+                    if not etf_name:
+                        category_fields = ['분류체계', '기초지수', '운용사']
+                        for field in category_fields:
+                            if field in row and row[field] and str(row[field]).strip() != '' and str(row[field]).strip() != 'nan':
+                                etf_name = str(row[field]).strip()
+                                break
+                    
+                    # 3. 기본값 설정
+                    if not etf_name or etf_name == 'nan':
+                        etf_name = f"ETF_{stock_code}"
+                    
                     rec = {
-                        'name': row.get('종목명', 'N/A'),
+                        'name': etf_name,
                         'code': stock_code,
                         'score': row.get(score_column, 0),
                         'risk_tier': row.get('risk_tier', 1),

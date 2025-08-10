@@ -8,20 +8,21 @@
 ```
 KB_Report/
 ├── app/                          # 메인 애플리케이션
-│   ├── main.py                   # 메인 앱 
+│   ├── main.py                   # 메인 앱
 │   ├── chatbot_app.py            # 챗봇 
 │   └── modules/                  # 모듈화된 기능들
 │       ├── __init__.py           # 모듈 초기화
 │       ├── market_data.py        # 실시간 시장 데이터 
 │       ├── daily_briefing.py     # 데일리 브리핑
 │       ├── recommendations.py    # 추천 시스템
-│       └── news_analyzer.py      # 뉴스 분석 
+│       ├── news_analyzer.py      # 뉴스 분석 (전체 뉴스 감정분석)
+│       └── etf_constituent_analyzer.py # ETF 포트폴리오 분석
 ├── chatbot/                      # 챗봇 핵심 로직
-│   ├── config.py                 # 설정 및 상수
+│   ├── config.py                 # 설정 및 상수 (MPTI, WMTI, 레벨별 프롬프트)
 │   ├── etf_analysis.py           # 종목 분석 
 │   ├── etf_comparison.py         # 종목 비교 
 │   ├── recommendation_engine.py  # 추천 엔진 
-│   ├── gpt_client.py             # GPT 클라이언트 
+│   ├── gpt_client.py             # GPT 클라이언트
 │   └── utils.py                  # 유틸리티 함수 
 ├── dart_api/                     # DART API 연동
 │   ├── main.py                   # DART 메인 실행 
@@ -65,7 +66,8 @@ KB_Report/
 ├── REPORT_ANALYSIS.md            # 리포트 분석 문서
 ├── CHATBOT_ANALYSIS.md           # 챗봇 분석 문서 
 ├── run_app.py                    # 앱 실행 스크립트 
-└── requirements.txt              # 의존성 패키지
+├── requirements.txt              # 의존성 패키지
+└── .env                         # 환경변수 설정 (API 키 등)
 ```
 
 ## 🚀 실행 방법
@@ -99,9 +101,11 @@ python -m streamlit run app/chatbot_app.py
 
 ### 📊 맞춤형 데일리 리포트
 - **실시간 시장 개요**: KOSPI, KOSDAQ, 글로벌 지수
+- **동적 시장 해석**: GPT 기반 사용자 레벨별 맞춤 해석
 - **데일리 브리핑**: 관심종목 분석 및 뉴스 크롤링 
-- **추천 종목**: WMTI 기반 맞춤 추천
-- **뉴스 감정분석**: GPT 기반 뉴스 분석
+- **추천 종목**: WMTI 기반 맞춤 추천 (GPT 기반 추천 근거 생성)
+- **뉴스 감정분석**: 전체 크롤링 뉴스에 대한 GPT 기반 감정분석
+- **ETF 포트폴리오 분석**: 구성종목 분석 및 상위 종목 뉴스 분석
 
 ### 🤖 AI 챗봇
 - **자연어 상호작용**: 투자 관련 질문 답변
@@ -113,6 +117,7 @@ python -m streamlit run app/chatbot_app.py
 - **WMTI (Wealth Management Type Indicator)**: 16가지 투자 성향 분류
 - **MPTI (My Personal Type Indicator)**: 6가지 설명 스타일
 - **레벨별 맞춤화**: 초보자~전문가 레벨별 콘텐츠
+- **동적 프롬프트 생성**: 사용자 프로필 기반 GPT 프롬프트 최적화
 
 ## 🔧 핵심 모듈 설명
 
@@ -138,18 +143,37 @@ python -m streamlit run app/chatbot_app.py
 # 추천 시스템
 - WMTI 기반 종목 추천
 - 실시간 가격/거래량 데이터
-- GPT 기반 추천 근거 생성
+- GPT 기반 추천 근거 생성 (사용자 레벨별 맞춤)
 ```
 
 ### 4. News Analyzer (`modules/news_analyzer.py`)
 ```python
 # 뉴스 분석 시스템 
-- 네이버 뉴스 크롤링
-- GPT 감정분석
+- 네이버 뉴스 크롤링 (전체 뉴스 대상)
+- GPT 감정분석 (모든 크롤링 뉴스)
 - 레벨별 요약 생성 (1-5단계)
 - 키워드 동적 생성 시스템
+- 감정분석 결과 시각화
 ```
 
+### 5. GPT Client (`chatbot/gpt_client.py`)
+```python
+# GPT API 통합 클라이언트
+- 동적 시장 해석 생성
+- 사용자 레벨별 맞춤 콘텐츠
+- MPTI 스타일 적용
+- API 실패 시 폴백 로직
+- 환경변수 기반 API 키 관리
+```
+
+### 6. ETF Constituent Analyzer (`modules/etf_constituent_analyzer.py`)
+```python
+# ETF 포트폴리오 분석
+- 구성종목 상세 분석
+- 상위 3개 종목 뉴스 분석
+- 업종별 분포 분석
+- 포트폴리오 집중도 분석
+```
 
 ## 📊 데이터 소스
 
@@ -164,5 +188,6 @@ python -m streamlit run app/chatbot_app.py
 - **yfinance**: 글로벌 ETF 데이터
 - **네이버 금융**: 뉴스 및 시세 정보
 - **DART API**: 기업 공시 정보
+
 
 

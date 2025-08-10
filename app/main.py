@@ -25,10 +25,12 @@ from modules.daily_briefing import DailyBriefing
 from modules.recommendations import Recommendations
 from modules.news_analyzer import NewsAnalyzer
 
-# 안전 임포트
+# 임포트
 try:
     from chatbot.config import Config
     from chatbot.utils import safe_read_csv_with_fallback
+    from chatbot.gpt_client import GPTClient
+    import openai
     CHATBOT_MODULES_AVAILABLE = True
 except ImportError as e:
     CHATBOT_MODULES_AVAILABLE = False
@@ -47,9 +49,12 @@ class DailyReportApp:
             if CHATBOT_MODULES_AVAILABLE:
                 self.config = Config()
                 self.data = self._load_data()
+                # GPT 클라이언트 초기화
+                self.gpt_client = GPTClient()
             else:
                 self.config = None
                 self.data = {}
+                self.gpt_client = None
             
             # 모듈 초기화
             self.market_data = RealTimeMarketData()
@@ -61,6 +66,7 @@ class DailyReportApp:
             logger.error(f"앱 초기화 실패: {e}")
             self.config = None
             self.data = {}
+            self.gpt_client = None
     
     @st.cache_data
     def _load_data(_self) -> Dict[str, pd.DataFrame]:
@@ -71,7 +77,7 @@ class DailyReportApp:
             
             data = {}
             
-            # ETF 캐시 데이터 (가장 중요)
+            # ETF 캐시 데이터
             cache_path = _self.config.get_data_path('cache')
             if cache_path and os.path.exists(cache_path):
                 data['etf_cache'] = safe_read_csv_with_fallback(cache_path)
@@ -181,52 +187,119 @@ class DailyReportApp:
             st.write(basic_interpretation)
     
     def _generate_realtime_market_interpretation(self, level: int, mpti_type: str, korean_market_data: Dict, global_market_data: Dict) -> str:
-        """실시간 시장 해석 생성 (사용자 프로필 고려)"""
-        # MPTI별 설명 스타일
-        mpti_styles = {
-            'A': "직관적으로",  # 간단하고 핵심만
-            'B': "논리적으로",  # 체계적이고 단계별
-            'C': "감정적으로",  # 생생하고 시각적
-            'D': "실용적으로"   # 구체적이고 실전적
-        }
-        
-        style = mpti_styles.get(mpti_type, "일반적으로")
-        
-        if level == 1:
-            return f"오늘 시장은 {style} 조용히 시작했어요! 코스피와 코스닥이 안정적으로 움직이고 있어요. 투자에 관심을 가져보세요!"
-        elif level == 2:
-            return f"시장이 {style} 비교적 안정적인 모습을 보이고 있습니다. 글로벌 시장과의 연관성을 주목해보세요. 기본 투자 지식을 쌓아보세요."
-        elif level == 3:
-            return f"국내외 시장이 {style} 균형잡힌 움직임을 보이고 있습니다. 투자자들은 신중한 관망세를 유지하고 있습니다. 실전 투자 전략을 고려해보세요."
-        elif level == 4:
-            return f"시장의 기술적 지표와 글로벌 리스크 요인을 {style} 종합적으로 분석한 결과, 현재는 중립적 관점에서 접근하는 것이 적절해 보입니다. 고급 투자 기법을 활용해보세요."
-        else:
-            return f"시장의 기술적 지표와 글로벌 리스크 요인을 {style} 종합적으로 분석한 결과, 현재는 중립적 관점에서 접근하는 것이 적절해 보입니다. 전문가 수준의 분석을 참고하세요."
+        """실시간 시장 해석 생성 """
+        try:
+            # GPT 클라이언트가 사용 가능한 경우
+            if self.gpt_client and self.gpt_client.is_configured():
+                # 사용자 프로필 생성
+                user_profile = {
+                    'level': level,
+                    'investor_type': mpti_type
+                }
+                
+                # 시장 데이터 준비
+                market_data = {
+                    'kospi_change': korean_market_data.get('KOSPI', {}).get('change_percent', 0),
+                    'kosdaq_change': korean_market_data.get('KOSDAQ', {}).get('change_percent', 0),
+                    'sp500_change': global_market_data.get('S&P 500', {}).get('change_percent', 0),
+                    'nasdaq_change': global_market_data.get('NASDAQ', {}).get('change_percent', 0),
+                    'date': pd.Timestamp.now().strftime('%Y-%m-%d')
+                }
+                
+                # GPT를 통한 시장 해석 생성
+                return self.gpt_client.generate_market_interpretation(market_data, user_profile)
+            else:
+                # GPT 클라이언트가 없는 경우 기본 해석으로 fallback
+                return self._generate_fallback_market_interpretation(level, mpti_type, korean_market_data, global_market_data)
+                
+        except Exception as e:
+            logger.error(f"GPT 시장 해석 생성 실패: {e}")
+            return self._generate_fallback_market_interpretation(level, mpti_type, korean_market_data, global_market_data)
     
     def _generate_basic_market_interpretation(self, level: int, mpti_type: str) -> str:
-        """기본 시장 해석 생성 (사용자 프로필 고려)"""
-        # MPTI별 설명 스타일
-        mpti_styles = {
-            'A': "간단하게",
-            'B': "체계적으로", 
-            'C': "생생하게",
-            'D': "구체적으로"
-        }
-        
-        style = mpti_styles.get(mpti_type, "일반적으로")
-        
-        if level == 1:
-            return f"시장 데이터를 {style} 확인하고 있어요. 잠시만 기다려주세요!"
-        elif level == 2:
-            return f"실시간 시장 데이터를 {style} 분석 중입니다."
-        elif level == 3:
-            return f"시장 상황을 {style} 종합적으로 분석하고 있습니다."
-        elif level == 4:
-            return f"시장 상황을 {style} 심화 분석하고 있습니다."
-        else:
-            return f"시장 상황을 {style} 전문적으로 분석하고 있습니다."
+        """기본 시장 해석 생성 """
+        try:
+            # GPT 클라이언트가 사용 가능한 경우
+            if self.gpt_client and self.gpt_client.is_configured():
+                # 사용자 프로필 생성
+                user_profile = {
+                    'level': level,
+                    'investor_type': mpti_type
+                }
+                
+                # 기본 시장 데이터
+                market_data = {
+                    'kospi_change': 0,
+                    'kosdaq_change': 0,
+                    'sp500_change': 0,
+                    'nasdaq_change': 0,
+                    'date': pd.Timestamp.now().strftime('%Y-%m-%d')
+                }
+                
+                # GPT를 통한 기본 시장 해석 생성
+                return self.gpt_client.generate_market_interpretation(market_data, user_profile)
+            else:
+                # GPT 클라이언트가 없는 경우 기본 해석으로 fallback
+                return self._generate_fallback_basic_interpretation(level, mpti_type)
+                
+        except Exception as e:
+            logger.error(f"GPT 기본 시장 해석 생성 실패: {e}")
+            return self._generate_fallback_basic_interpretation(level, mpti_type)
     
-    def generate_report(self, level: int, wmti_type: str, mpti_type: str, interest_stocks: str, show_portfolio: bool, show_price_comparison: bool, show_news_sentiment: bool):
+    def _generate_fallback_market_interpretation(self, level: int, mpti_type: str, korean_market_data: Dict, global_market_data: Dict) -> str:
+        """GPT API 실패 시 기본 시장 해석 생성"""
+        try:
+            # GPT 클라이언트의 fallback 메서드 사용
+            if self.gpt_client:
+                user_profile = {'level': level, 'investor_type': mpti_type}
+                market_data = {
+                    'kospi_change': korean_market_data.get('KOSPI', {}).get('change_percent', 0),
+                    'kosdaq_change': korean_market_data.get('KOSDAQ', {}).get('change_percent', 0),
+                    'sp500_change': global_market_data.get('S&P 500', {}).get('change_percent', 0),
+                    'nasdaq_change': global_market_data.get('NASDAQ', {}).get('change_percent', 0),
+                    'date': pd.Timestamp.now().strftime('%Y-%m-%d')
+                }
+                return self.gpt_client._generate_fallback_market_interpretation(market_data, user_profile)
+            else:
+                # GPT 클라이언트가 없는 경우 기본 텍스트
+                kospi_change = korean_market_data.get('KOSPI', {}).get('change_percent', 0)
+                kosdaq_change = korean_market_data.get('KOSDAQ', {}).get('change_percent', 0)
+                return f"오늘 시장은 {'상승' if kospi_change > 0 else '하락'}세를 보였습니다. KOSPI {kospi_change}%, KOSDAQ {kosdaq_change}% 변동이 있었습니다."
+        except Exception as e:
+            logger.error(f"Fallback 시장 해석 생성 실패: {e}")
+            return "시장 데이터를 분석 중입니다."
+    
+    def _generate_fallback_basic_interpretation(self, level: int, mpti_type: str) -> str:
+        """GPT API 실패 시 기본 해석 생성"""
+        try:
+            # GPT 클라이언트의 fallback 메서드 사용
+            if self.gpt_client:
+                user_profile = {'level': level, 'investor_type': mpti_type}
+                market_data = {
+                    'kospi_change': 0,
+                    'kosdaq_change': 0,
+                    'sp500_change': 0,
+                    'nasdaq_change': 0,
+                    'date': pd.Timestamp.now().strftime('%Y-%m-%d')
+                }
+                return self.gpt_client._generate_fallback_market_interpretation(market_data, user_profile)
+            else:
+                # GPT 클라이언트가 없는 경우 기본 텍스트
+                if level == 1:
+                    return "시장 데이터를 확인하고 있어요. 잠시만 기다려주세요!"
+                elif level == 2:
+                    return "실시간 시장 데이터를 분석 중입니다."
+                elif level == 3:
+                    return "시장 상황을 종합적으로 분석하고 있습니다."
+                elif level == 4:
+                    return "시장 상황을 심화 분석하고 있습니다."
+                else:
+                    return "시장 상황을 전문적으로 분석하고 있습니다."
+        except Exception as e:
+            logger.error(f"Fallback 기본 해석 생성 실패: {e}")
+            return "시장 데이터를 분석 중입니다."
+    
+    def generate_report(self, level: int, wmti_type: str, mpti_type: str, interest_stocks: str, show_portfolio: bool, show_price_comparison: bool):
         """리포트 생성"""
         params = {
             'level': level,
@@ -234,8 +307,7 @@ class DailyReportApp:
             'mpti_type': mpti_type,
             'interest_stocks': interest_stocks,
             'show_portfolio': show_portfolio,
-            'show_price_comparison': show_price_comparison,
-            'show_news_sentiment': show_news_sentiment
+            'show_price_comparison': show_price_comparison
         }
         return self.generate_integrated_report(params)
     
@@ -246,7 +318,6 @@ class DailyReportApp:
             wmti_type = params['wmti_type']
             mpti_type = params['mpti_type']
             interest_stocks = params['interest_stocks']
-            show_news_sentiment = params.get('show_news_sentiment', False)
             
             # 관심 종목 파싱
             if isinstance(interest_stocks, list):
@@ -268,11 +339,7 @@ class DailyReportApp:
             self.recommendations.set_data(self.data)  # 데이터 설정
             self.recommendations.display_recommendations(level, wmti_type, mpti_type, self.data)
             
-            # 4. 뉴스 감정분석 (선택적)
-            if show_news_sentiment and interest_list:
-                st.markdown("---")
-                main_stock_code = self.daily_briefing._get_stock_code(interest_list[0])
-                self.news_analyzer.display_news_analysis(main_stock_code, level, mpti_type)
+        
             
         except Exception as e:
             st.error(f"리포트 생성 중 오류: {e}")
@@ -337,6 +404,15 @@ class DailyReportApp:
         with st.sidebar:
             st.markdown("## 🎯 투자자 프로필 설정")
             
+            # GPT API 상태 표시
+            if CHATBOT_MODULES_AVAILABLE and hasattr(self, 'gpt_client') and self.gpt_client is not None:
+                if self.gpt_client.is_configured():
+                    st.success("✅ GPT API가 설정되어 맞춤형 분석을 제공합니다.")
+                else:
+                    st.info("ℹ️ GPT API 키가 .env 파일에 설정되지 않았습니다. 기본 분석을 제공합니다.")
+            elif CHATBOT_MODULES_AVAILABLE:
+                st.info("ℹ️ GPT 클라이언트를 초기화할 수 없습니다. 기본 분석을 제공합니다.")
+            
             # 현재 선택된 값 가져오기 (챗봇과 동일)
             current_profile = st.session_state.get('user_profile', {})
             current_level = current_profile.get('level', 1)
@@ -387,20 +463,15 @@ class DailyReportApp:
                 )
             
             # 관심 종목 입력
-            default_stocks = "반도체 ETF, 2차전지 ETF, KOSPI ETF"
+            default_stocks = "KBSTAR 200, 반도체 ETF"
             interest_stocks = st.text_area(
                 "관심 종목",
                 value=default_stocks,
-                help="분석하고 싶은 종목들을 쉼표로 구분하여 입력하세요 (예: 반도체 ETF, 2차전지 ETF, KOSPI ETF)",
+                help="분석하고 싶은 종목들을 쉼표로 구분하여 입력하세요 (예: KBSTAR 200, 반도체 ETF)",
                 height=100
             )
             
-            # 추가 옵션
-            show_news_sentiment = st.checkbox(
-                "뉴스 감정분석 포함",
-                value=False,
-                help="뉴스 감정분석 결과를 리포트에 포함합니다"
-            )
+    
             
             # 사용자 프로필 저장
             st.session_state.user_profile = {
@@ -432,8 +503,7 @@ class DailyReportApp:
                 'mpti_type': mpti_type,
                 'interest_stocks': interest_stocks,
                 'show_portfolio': False,
-                'show_price_comparison': False,
-                'show_news_sentiment': show_news_sentiment
+                'show_price_comparison': False
             })
 
 def main():

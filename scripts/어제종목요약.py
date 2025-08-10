@@ -13,8 +13,15 @@ from dotenv import load_dotenv
 # 환경변수 로드
 load_dotenv()
 
-# ── 레벨별 스타일 프롬프트 ───────────────────────────────────
-LEVEL_PROMPTS = {
+# ── 레벨별 스타일 프롬프트 (Config에서 가져오기) ───────────────────────────────────
+try:
+    import sys
+    import os
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    from chatbot.config import Config
+    LEVEL_PROMPTS = Config.LEVEL_PROMPTS
+except ImportError:
+    LEVEL_PROMPTS = {
         1: """- Level 1 (초보자): 
        • 어투: 유치원/초등학생도 이해할 수 있는 아주 쉬운 말로 설명
        • 내용: 투자 기초 개념 위주, 복잡한 용어는 비유와 예시로 대체
@@ -93,7 +100,7 @@ class GPTExecutor:
 
 # ── Streamlit UI ─────────────────────────────────────────────
 def main():
-    st.title("최근 5거래일 ETF 시세 비교 요약 에이전트 (GPT)")
+    st.title("최근 5거래일 시세 비교 요약 에이전트 (GPT)")
     
     # API 키 입력
     api_key = st.text_input("OpenAI API Key", type="password", 

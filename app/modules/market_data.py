@@ -10,29 +10,58 @@ import time
 import logging
 from typing import Dict, Optional
 import streamlit as st
+import pandas as pd
+import numpy as np
+import requests
+from datetime import datetime, timedelta
+import logging
+from typing import Dict, Any, Optional, List
+import time
 
-# 외부 라이브러리 import
+# 조건부 import
 try:
     import yfinance as yf
     YFINANCE_AVAILABLE = True
 except ImportError:
     YFINANCE_AVAILABLE = False
-    st.warning("yfinance 라이브러리가 설치되지 않았습니다.")
+    logging.warning("yfinance 라이브러리가 설치되지 않았습니다.")
 
 try:
     from pykrx import stock
     PYKRX_AVAILABLE = True
 except ImportError:
     PYKRX_AVAILABLE = False
-    st.warning("pykrx 라이브러리가 설치되지 않았습니다.")
+    logging.warning("pykrx 라이브러리가 설치되지 않았습니다.")
 
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
+
+# 프로젝트 루트 경로를 Python 경로에 추가
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root))
+
+from chatbot.config import Config
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 설정 객체
+config = Config()
 
 class RealTimeMarketData:
     """실시간 시장 데이터 수집 클래스"""
     
     def __init__(self):
+        """초기화"""
         self.session = requests.Session()
+        self.timeout = 10
+        
+        # 설정 객체
+        self.config = Config()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
@@ -227,7 +256,7 @@ class RealTimeMarketData:
             from bs4 import BeautifulSoup
             
             # 네이버 금융 지수 페이지
-            url = "https://finance.naver.com/sise/sise_index.nhn"
+            url = f"{self.config.NAVER_FINANCE_BASE_URL}/sise/sise_index.nhn"
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
             

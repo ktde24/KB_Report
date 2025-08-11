@@ -7,7 +7,19 @@ from dotenv import load_dotenv
 
 from corpcode_loader import get_corp_code
 from dart_api import get_report_list, get_full_html
-from utils.gpt_client import call_gpt
+import sys
+import logging
+from pathlib import Path
+
+# 프로젝트 루트 경로를 Python 경로에 추가
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
+
+from chatbot.gpt_client import GPTClient
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 API_KEY = os.getenv("DART_API_KEY")
@@ -53,8 +65,18 @@ def build_gpt_messages(report_type: str, body_text: str) -> list:
     ]
 
 def call_gpt_with_messages(messages: list, api_key: str, model: str = "gpt-4o-mini") -> str:
-    """GPT API 호출"""
-    return call_gpt(messages, api_key, model, temperature=0.1)
+    """
+    GPT API 호출 (통합된 GPTClient 사용)
+    """
+    if not api_key:
+        raise RuntimeError("OpenAI API 키가 설정되지 않았습니다.")
+    
+    try:
+        gpt_client = GPTClient()
+        return gpt_client.call_gpt_simple(messages, model)
+    except Exception as e:
+        logger.error(f"GPT API 호출 실패: {e}")
+        raise
 
 
 

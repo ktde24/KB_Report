@@ -70,7 +70,7 @@ class GPTClient:
         
         # GPT 모델 설정
         self.model = "gpt-3.5-turbo"  # 모델 변경
-        self.max_tokens = 800  # 토큰 수 감소 
+        self.max_tokens = 1000  # 토큰 수 감소 
         
         # OpenAI 클라이언트 객체
         self.client = None
@@ -113,10 +113,10 @@ class GPTClient:
         주어진 프롬프트를 GPT에 전송하여 자연어 응답을 생성합니다.
         
         Args:
-            prompt: GPT에 전송할 프롬프트 문자열 (단일 프롬프트 사용 시)
-            system_prompt: 시스템 프롬프트 (분리된 프롬프트 사용 시)
-            user_prompt: 사용자 프롬프트 (분리된 프롬프트 사용 시)
-            max_tokens: 최대 토큰 수 (None인 경우 기본값 사용)
+            prompt: GPT에 전송할 프롬프트 문자열
+            system_prompt: 시스템 프롬프트
+            user_prompt: 사용자 프롬프트
+            max_tokens: 최대 토큰 수
         
         Returns:
             str: GPT가 생성한 응답 텍스트
@@ -748,3 +748,72 @@ ETF 데이터는 정상적으로 분석되었으며, 차트와 수치 정보를 
             return f"**요약:** {base_text}"
         else:
             return base_text 
+
+    def call_gpt_simple(self, messages: list, model: str = None, temperature: float = 0.1) -> str:
+        """
+        간단한 GPT API 호출 (dart_api 호환성)
+        messages: [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
+        """
+        if not self.is_configured():
+            raise RuntimeError("GPT API가 설정되지 않았습니다.")
+        
+        model = model or self.model
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=self.max_tokens
+            )
+            return self._parse_response(response)
+        except Exception as e:
+            logger.error(f"GPT API 호출 실패: {e}")
+            return self._generate_fallback_response_from_messages(messages)
+    
+    def parse_with_gpt(self, text: str, model: str = None) -> str:
+        """
+        GPT를 사용한 문서 파싱 및 요약 (dart_api 호환성)
+        text: 순수 텍스트(한글 포함)
+        """
+        system_prompt = (
+            "당신은 금융 애널리스트이자 기업공시 전문 파서입니다.\n"
+            "아래에 주어진 DART 공시 전문 텍스트를 읽고, 투자자 관점에서 요약해 주세요:\n\n"
+            "원본 자료 : URL을 꼭 명시해주세요. \n"
+            "핵심 요약: 필수적인 내용 반드시 포함해주세요. \n"
+            "주요 수치: 항목별로 (숫자 + 단위 + 증감률(%))\n\n"
+            "※ 증감률 표기 시 '–6.49%' 와 같이 '%'만 사용하세요.\n"
+            "※ 불필요한 'p' 또는 'p.p.' 표기는 제거합니다.\n"
+            "3) 투자 시사점: 👍 긍정 / 👎 부정 신호 포함 \n"
+            "4) 설명 난이도 (Level 1~3): \n"
+            "• Level 1 – 유치원/초1 스타일 (쉬운 비유와 함께, 아주 쉽게 알려줘야합니다) \n"
+            "• Level 2 – 중고등학생용 (핵심+이유, 너무 전문적이진 않지만, 이해되는 수준으로 Level1보다는 어렵게 설명해주세요.) \n"
+            "• Level 3 – 고급 분석(실전 투자가이드, 실전투자자용 설명이면 좋습니다.) \n"
+            "각 level별로 응답해주세요."
+        )
+        
+        user_content = f"다음 공시 텍스트를 분석해주세요:\n\n{text}"
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ]
+        
+        return self.call_gpt_simple(messages, model)
+    
+    def _generate_fallback_response_from_messages(self, messages: list) -> str:
+        """메시지 리스트로부터 폴백 응답 생성"""
+        try:
+            # 마지막 사용자 메시지 찾기
+            user_message = None
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    user_message = msg.get("content", "")
+                    break
+            
+            if user_message:
+                return f"⚠️ GPT API 호출에 실패했습니다. 요청 내용: {user_message[:100]}..."
+            else:
+                return "⚠️ GPT API 호출에 실패했습니다."
+        except Exception:
+            return "⚠️ GPT API 호출에 실패했습니다." 

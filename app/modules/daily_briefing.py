@@ -55,12 +55,17 @@ class DailyBriefing:
         main_stock = interest_list[0]
         
         # ETF 구성종목 분석 시도
+        logger.info(f"분석 대상: {main_stock}")
+        logger.info(f"ETF_ANALYZER_AVAILABLE: {ETF_ANALYZER_AVAILABLE}")
+        logger.info(f"is_etf_code: {self._is_etf_code(main_stock)}")
+        
         if ETF_ANALYZER_AVAILABLE and self._is_etf_code(main_stock):
             try:
                 etf_analyzer = ETFConstituentAnalyzer()
                 etf_code = self._get_etf_code_from_name(main_stock)
                 
                 if etf_code:
+                    logger.info(f"ETF 코드 매핑 성공: {main_stock} → {etf_code}")
                     # ETF 종합 분석 리포트 생성 (MPTI 스타일 적용)
                     analysis_result = etf_analyzer.generate_etf_summary_report(
                         etf_code=etf_code,
@@ -75,6 +80,9 @@ class DailyBriefing:
                         return
                     else:
                         st.warning(f"ETF 분석 실패: {analysis_result['error']}")
+                else:
+                    st.warning(f"ETF 코드 매핑 실패: {main_stock}")
+                    st.info("기본 분석으로 진행합니다.")
                 
             except Exception as e:
                 st.error(f"ETF 구성종목 분석 중 오류: {e}")
@@ -383,7 +391,7 @@ class DailyBriefing:
     
     def _is_etf_code(self, stock_name: str) -> bool:
         """ETF 종목인지 확인"""
-        etf_keywords = ['ETF', 'KBSTAR', 'TIGER', 'KODEX', 'ARIRANG', 'HANARO', 'SMART']
+        etf_keywords = ['ETF', 'KBSTAR', 'TIGER', 'KODEX', 'ARIRANG', 'HANARO', 'SMART', 'RISE', 'ACE']
         return any(keyword in stock_name.upper() for keyword in etf_keywords)
     
     def _get_etf_code_from_name(self, stock_name: str) -> Optional[str]:
@@ -404,7 +412,7 @@ class DailyBriefing:
             'KODEX 반도체': '091160',
             'KODEX 2차전지': '305720',
             
-            # ACE 반도체 ETF (실제 존재하는 반도체 ETF들)
+            # ACE 반도체 ETF 
             'ACE AI반도체포커스': '469150',
             'ACE 글로벌AI맞춤형반도체': '494340',
             'ACE 글로벌반도체TOP4 Plus SOLACTIVE': '446770',
@@ -412,12 +420,12 @@ class DailyBriefing:
             'ACE 일본반도체': '469160',
             'ACE 미국반도체데일리타겟커버드콜(합성)': '480040',
             
-            # 가상 이름을 실제 ETF로 매핑
-            '반도체 ETF': '469150',  # ACE AI반도체포커스로 매핑
-            'AI반도체 ETF': '469150',
-            '글로벌반도체 ETF': '446770',
-            '엔비디아 ETF': '483320',
-            '일본반도체 ETF': '469160'
+            # RISE ETF
+            'RISE 미국반도체NYSE': '469060',  
+            'RISE 미국반도체': '469060',      
+            'RISE 미국반도체NYSE(H)': '469050',  
+            
+    
         }
         
         # 정확한 매칭
@@ -428,6 +436,13 @@ class DailyBriefing:
         if '반도체' in stock_name:
             # 가장 대표적인 반도체 ETF로 매핑
             return '469150'  # ACE AI반도체포커스
+        
+        # RISE 관련 키워드 매칭
+        if 'RISE' in stock_name.upper():
+            if '반도체' in stock_name and '미국' in stock_name:
+                return '469060'  # RISE 미국반도체NYSE (실제 미국 반도체 종목들)
+            elif '반도체' in stock_name:
+                return '469150'  # ACE AI반도체포커스 (한국 반도체 종목들) 
         
         # 부분 매칭
         for name, code in etf_code_map.items():

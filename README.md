@@ -3,35 +3,72 @@
 ## 🎯 프로젝트 개요
 사용자의 투자 성향(WMTI)과 설명 선호도(MPTI)에 따라 개인화된 투자 조언을 제공하는 AI 기반 투자 분석 시스템입니다. 실시간 시장 데이터, 뉴스 감정분석, GPT 기반 추천 시스템을 통합하여 사용자 맞춤형 투자 경험을 제공합니다.
 
+## 🏆 공모전 제출 프로젝트 특징
+
+### 🎨 **개인화 시스템**
+- **WMTI (Wealth Management Type Indicator)**: 16가지 투자 성향 분류
+- **MPTI (My Personal Type Indicator)**: 6가지 설명 스타일 분류
+- **레벨별 맞춤화**: 초보자~전문가 레벨별 콘텐츠 제공
+- **동적 프롬프트 생성**: 사용자 프로필 기반 GPT 프롬프트 최적화
+
+### 🤖 **AI 기반 분석**
+- **GPT-3.5-turbo 통합**: 모든 분석 결과를 자연어로 변환
+- **실시간 뉴스 감정분석**: 네이버 금융 뉴스 크롤링 및 GPT 감정분석
+- **동적 시장 해석**: 사용자 레벨별 맞춤 시장 분석
+- **포트폴리오 분석**: 구성종목 상세 분석 및 뉴스 연동
+
+### 📊 **실시간 데이터 통합**
+- **다중 데이터 소스**: pykrx, yfinance, 네이버 금융, DART API
+- **실시간 시장 데이터**: KOSPI, KOSDAQ, 글로벌 지수
+- **성과 분석**: 수익률, 위험도, 자산규모 통합 분석
+- **환율 정보**: 실시간 환율 데이터 제공
+
+## 🔄 최근 주요 개선사항
+
+### 📰 **뉴스 분석 시스템 개선**
+- **관련성 필터링 강화**: 관련 없는 뉴스 자동 제거
+- **해외 종목 매핑 개선**: NVDA, AMD, INTC 등 해외 종목 지원
+- **헤드라인 표시 개선**: 뉴스 제목 명확하게 표시
+- **제외 키워드 시스템**: "연체금", "신용사면" 등 관련 없는 키워드 자동 필터링
+
+### 🎯 **추천 시스템 표시 개선**
+- **일관된 형식**: "🏆 추천 ETF Top3" 형식으로 통일
+- **Top3 추천**: 상위 3개 ETF만 표시하여 명확성 향상
+- **추천 이유 표시**: 각 ETF별 구체적인 추천 이유 제공
+- **투자 팁 섹션**: GPT 기반 일관된 투자 조언
+
+### 🤖 **GPT 프롬프트 최적화**
+- **일관된 설명 형식**: 매번 다른 형식의 설명 방지
+- **구조화된 출력**: 명확한 섹션별 구분
+- **사용자 레벨별 맞춤**: 레벨에 따른 설명 스타일 조정
+
 ## 🏗️ 프로젝트 구조
 
 ```
 KB_Report/
 ├── app/                          # 메인 애플리케이션
-│   ├── main.py                   # 메인 앱
-│   ├── chatbot_app.py            # 챗봇 
+│   ├── main.py                   # 메인 리포트 앱 (Streamlit)
+│   ├── chatbot_app.py            # AI 챗봇 앱 (Streamlit)
 │   └── modules/                  # 모듈화된 기능들
 │       ├── __init__.py           # 모듈 초기화
 │       ├── market_data.py        # 실시간 시장 데이터 
 │       ├── daily_briefing.py     # 데일리 브리핑
-│       ├── recommendations.py    # 추천 시스템
-│       ├── news_analyzer.py      # 뉴스 분석 (전체 뉴스 감정분석)
+│       ├── recommendations.py    # 추천 시스템 
+│       ├── news_analyzer.py      # 뉴스 분석 
 │       └── etf_constituent_analyzer.py # ETF 포트폴리오 분석
 ├── chatbot/                      # 챗봇 핵심 로직
 │   ├── config.py                 # 설정 및 상수 (MPTI, WMTI, 레벨별 프롬프트)
 │   ├── etf_analysis.py           # 종목 분석 
 │   ├── etf_comparison.py         # 종목 비교 
 │   ├── recommendation_engine.py  # 추천 엔진 
-│   ├── gpt_client.py             # GPT 클라이언트
+│   ├── gpt_client.py             # GPT 클라이언트 
 │   └── utils.py                  # 유틸리티 함수 
 ├── dart_api/                     # DART API 연동
 │   ├── main.py                   # DART 메인 실행 
 │   ├── dart_api.py               # DART API 클라이언트 
 │   ├── corpcode_loader.py        # 기업코드 로더 
 │   ├── CORPCODE.xml              # 기업코드 데이터 
-│   ├── .gitignore                # DART API gitignore
 │   └── utils/                    # DART 유틸리티
-│       ├── gpt_client.py         # GPT 클라이언트 
 │       └── text_extractor.py     # 텍스트 추출기 
 ├── data/                         # 데이터 파일들
 │   ├── etf_scores_cache.csv      # 추천 점수 캐시 
@@ -47,19 +84,9 @@ KB_Report/
 ├── scripts/                      # 데이터 처리 스크립트
 │   ├── fetch_etf_daily.py        # 일일 데이터 수집
 │   ├── generate_etf_cache.py     # ETF 캐시 생성 
-│   ├── precompute_etf_scores.py  # 점수 사전 계산
 │   ├── calculate_risk_tier.py    # 위험도 계산 
 │   ├── gpt_sentiment.py          # GPT 감정분석 
-│   ├── data_analysis.py          # 데이터 분석 
-│   ├── fix_encoding.py           # 인코딩 수정 
-│   └── 어제종목요약.py           # 종목 요약 
-├── KB_Project/                   # 가상환경 (Python venv)
-│   ├── Scripts/                  # 가상환경 스크립트
-│   ├── Lib/                      # 라이브러리
-│   ├── Include/                  # 헤더 파일
-│   ├── share/                    # 공유 파일
-│   ├── etc/                      # 설정 파일
-│   └── pyvenv.cfg                # 가상환경 설정
+│   └── fix_encoding.py           # 인코딩 수정 
 ├── .git/                         # Git 저장소
 ├── .gitignore                    
 ├── README.md                     # 프로젝트 문서
@@ -74,7 +101,7 @@ KB_Report/
 
 ### 1. 환경 설정
 ```bash
-# 가상환경 생성 (권장)
+# 가상환경 생성 
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
@@ -84,8 +111,16 @@ pip install -r requirements.txt
 
 ### 2. 환경변수 설정
 `.env` 파일을 생성하고 다음을 추가:
-```
+```env
+# 필수 API 키
 OPENAI_API_KEY=your_openai_api_key_here
+
+# 선택적 설정 (기본값 사용 가능)
+DATA_START_DATE=20230806
+DATA_END_DATE=20250806
+OPENAI_MODEL=gpt-3.5-turbo
+NAVER_FINANCE_BASE_URL=https://finance.naver.com
+DART_API_BASE_URL=https://opendart.fss.or.kr
 ```
 
 ### 3. 애플리케이션 실행
@@ -95,6 +130,9 @@ python -m streamlit run app/main.py
 
 # 챗봇 앱
 python -m streamlit run app/chatbot_app.py
+
+# 또는 run_app.py 사용
+python run_app.py
 ```
 
 ## 🎨 주요 기능
@@ -127,6 +165,7 @@ python -m streamlit run app/chatbot_app.py
 - KOSPI/KOSDAQ 지수
 - 글로벌 주요 지수 (S&P500, NASDAQ, 등)
 - 환율 정보
+- 다중 데이터 소스 (pykrx, yfinance, 네이버 금융)
 ```
 
 ### 2. Daily Briefing (`modules/daily_briefing.py`) 
@@ -138,22 +177,28 @@ python -m streamlit run app/chatbot_app.py
 - 종목 코드와 키워드 기반 검색 분리
 ```
 
-### 3. Recommendations (`modules/recommendations.py`)
+### 3. Recommendations (`modules/recommendations.py`) 
 ```python
-# 추천 시스템
+# 추천 시스템 (최근 개선사항)
 - WMTI 기반 종목 추천
-- 실시간 가격/거래량 데이터
+- 일관된 "🏆 추천 ETF Top3" 형식
+- Top3 추천으로 명확성 향상
 - GPT 기반 추천 근거 생성 (사용자 레벨별 맞춤)
+- 추천 이유 명확하게 표시
 ```
 
-### 4. News Analyzer (`modules/news_analyzer.py`)
+### 4. News Analyzer (`modules/news_analyzer.py`) 
 ```python
-# 뉴스 분석 시스템 
+# 뉴스 분석 시스템
 - 네이버 뉴스 크롤링 (전체 뉴스 대상)
 - GPT 감정분석 (모든 크롤링 뉴스)
 - 레벨별 요약 생성 (1-5단계)
 - 키워드 동적 생성 시스템
 - 감정분석 결과 시각화
+- 관련성 필터링 강화 (관련 없는 뉴스 자동 제거)
+- 해외 종목 매핑 개선 (NVDA, AMD, INTC 등)
+- 제외 키워드 시스템 ("연체금", "신용사면" 등)
+- 헤드라인 표시 개선
 ```
 
 ### 5. GPT Client (`chatbot/gpt_client.py`)
@@ -164,6 +209,7 @@ python -m streamlit run app/chatbot_app.py
 - MPTI 스타일 적용
 - API 실패 시 폴백 로직
 - 환경변수 기반 API 키 관리
+- dart_api 호환성 지원
 ```
 
 ### 6. ETF Constituent Analyzer (`modules/etf_constituent_analyzer.py`)
@@ -173,6 +219,15 @@ python -m streamlit run app/chatbot_app.py
 - 상위 3개 종목 뉴스 분석
 - 업종별 분포 분석
 - 포트폴리오 집중도 분석
+```
+
+### 7. Recommendation Engine (`chatbot/recommendation_engine.py`) - 개선됨
+```python
+# 추천 엔진
+- WMTI 기반 추천 시스템
+- 일관된 프롬프트 형식 생성
+- 각 ETF별 구체적인 추천 이유 제공
+- GPT 기반 일관된 투자 조언
 ```
 
 ## 📊 데이터 소스
@@ -188,6 +243,7 @@ python -m streamlit run app/chatbot_app.py
 - **yfinance**: 글로벌 ETF 데이터
 - **네이버 금융**: 뉴스 및 시세 정보
 - **DART API**: 기업 공시 정보
+
 
 
 

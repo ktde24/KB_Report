@@ -17,8 +17,39 @@ class Config:
     """ETF 챗봇 설정 클래스"""
     
     # =============================================================================
-    # 파일 경로 설정
+    # 환경변수 기반 설정
     # =============================================================================
+    # 데이터 파일 날짜 범위 (환경변수에서 가져오거나 기본값 사용)
+    DATA_START_DATE = os.getenv("DATA_START_DATE", "20230806")
+    DATA_END_DATE = os.getenv("DATA_END_DATE", "20250806")
+    
+    # API 설정
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    
+    # 외부 API URL (환경변수로 관리 가능)
+    NAVER_FINANCE_BASE_URL = os.getenv("NAVER_FINANCE_BASE_URL", "https://finance.naver.com")
+    DART_API_BASE_URL = os.getenv("DART_API_BASE_URL", "https://opendart.fss.or.kr")
+    
+    # =============================================================================
+    # 파일 경로 설정 (동적 생성)
+    # =============================================================================
+    @classmethod
+    def get_data_paths(cls) -> Dict[str, str]:
+        """데이터 파일 경로를 동적으로 생성"""
+        return {
+            'etf_info': 'data/상품검색.csv',
+            'etf_prices': f'data/ETF_시세_데이터_{cls.DATA_START_DATE}_{cls.DATA_END_DATE}.csv',
+            'etf_performance': 'data/수익률 및 총보수(기간).csv',
+            'etf_aum': 'data/자산규모 및 유동성(기간).csv',
+            'etf_reference': 'data/참고지수(기간).csv',
+            'etf_risk': 'data/투자위험(기간).csv',
+            'risk_tier': 'data/etf_re_bp_simplified.csv',
+            'cache': 'data/etf_scores_cache.csv',
+            'listed_companies': 'data/상장법인목록.csv'
+        }
+    
+    # 기존 DATA_PATHS는 하위 호환성을 위해 유지 (기본값 사용)
     DATA_PATHS = {
         'etf_info': 'data/상품검색.csv',
         'etf_prices': 'data/ETF_시세_데이터_20230806_20250806.csv',
@@ -27,7 +58,8 @@ class Config:
         'etf_reference': 'data/참고지수(기간).csv',
         'etf_risk': 'data/투자위험(기간).csv',
         'risk_tier': 'data/etf_re_bp_simplified.csv',
-        'cache': 'data/etf_scores_cache.csv'
+        'cache': 'data/etf_scores_cache.csv',
+        'listed_companies': 'data/상장법인목록.csv'
     }
     
         # =============================================================================
@@ -323,8 +355,18 @@ MPTI 투자자 유형별 특성:
     
     @classmethod
     def get_data_path(cls, data_type: str) -> str:
-        """데이터 파일 경로 반환"""
-        return cls.DATA_PATHS.get(data_type, '')
+        """데이터 타입에 따른 파일 경로 반환 (동적 경로 우선)"""
+        # 동적 경로에서 먼저 확인
+        dynamic_paths = cls.get_data_paths()
+        if data_type in dynamic_paths:
+            return dynamic_paths[data_type]
+        
+        # 기존 DATA_PATHS에서 확인
+        if data_type in cls.DATA_PATHS:
+            return cls.DATA_PATHS[data_type]
+        
+        # 기본 경로 반환
+        return f"data/{data_type}.csv"
     
     @classmethod
     def get_investor_type_description(cls, investor_type: str) -> str:

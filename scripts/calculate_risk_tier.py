@@ -15,14 +15,25 @@ ETF 위험도 분류 스크립트
 
 import pandas as pd
 import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import warnings
+warnings.filterwarnings('ignore')
 
-# =============================================================================
-# 설정 파라미터
-# =============================================================================
+# 프로젝트 루트 경로를 Python 경로에 추가
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
 
-# 입력/출력 파일 경로
-INPUT_CSV   = 'data/ETF_시세_데이터_20230806_20250806.csv'  # ETF 시세 데이터
-OUTPUT_CSV  = 'data/etf_re_bp_simplified.csv'              # 위험도 분류 결과
+from chatbot.config import Config
+
+# 설정 객체
+config = Config()
+
+# 파일 경로 설정
+INPUT_CSV   = Config.get_data_path('etf_prices')  # ETF 시세 데이터
+OUTPUT_CSV  = Config.get_data_path('risk_tier')   # 위험도 분류 결과
 
 # 롤링 윈도우 크기 (약 6개월, 126영업일 기준)
 WINDOW = 126

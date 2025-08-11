@@ -70,8 +70,10 @@ class Recommendations:
                 )
                 
                 if recommendations and len(recommendations) > 0:
-                    # 추천 종목 표시
-                    for i, rec in enumerate(recommendations, 1):
+                    # 추천 종목 표시 (일관된 형식)
+                    st.markdown("## 🏆 추천 ETF Top3")
+                    
+                    for i, rec in enumerate(recommendations[:3], 1):  
                         if '안내' in rec:
                             # 안내 메시지인 경우
                             st.info(rec['안내'])
@@ -123,7 +125,7 @@ class Recommendations:
                             
                             # 프롬프트 생성
                             prompt = recommendation_engine.generate_recommendation_explanation(
-                                recommendations=recommendations,
+                                recommendations=recommendations[:3],  # Top3만 사용
                                 user_profile=user_profile,
                                 category_keyword="",
                                 context_docs=None
@@ -143,7 +145,7 @@ class Recommendations:
                             explanation = response.choices[0].message.content.strip()
                             
                             if explanation:
-                                st.markdown("**📝 추천 근거**")
+                                st.markdown("## 💡 투자 팁")
                                 st.write(explanation)
                         else:
                             st.info("OpenAI API 키가 설정되지 않아 추천 근거를 생성할 수 없습니다.")
@@ -306,7 +308,7 @@ class Recommendations:
         return reasons[:3]  # 최대 3개까지만 반환
     
     def _display_recommendation_card(self, rec: Dict, level: int, card_num: int, mpti_type: str):
-        """추천 종목 카드 표시"""
+        """추천 종목 카드 표시 (일관된 형식)"""
         st.markdown(f"""
         <div style="
             background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
@@ -315,11 +317,11 @@ class Recommendations:
             padding: 1.5rem;
             margin: 1rem 0;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-            <h3 style="margin: 0 0 1rem 0; color: #92400e;">{card_num}. {rec['name']} ({rec['code']})</h3>
+            <h3 style="margin: 0 0 1rem 0; color: #92400e;">{card_num}위: {rec['name']} ({rec['code']})</h3>
         </div>
         """, unsafe_allow_html=True)
         
-        # 지표 표시
+        # 기본 정보 표시
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -342,31 +344,21 @@ class Recommendations:
             else:
                 st.metric("거래량", self._format_volume(rec['volume']))
         
-        # 추천 근거 표시
+        # 추천 이유 표시 (일관된 형식)
         if 'reasons' in rec and rec['reasons']:
-            st.markdown("**💡 추천 근거**")
+            st.markdown("**추천 이유:**")
             for reason in rec['reasons']:
                 st.markdown(f"• {reason}")
         
-        # 레벨별 설명 (config.py 사용)
-        if CHATBOT_MODULES_AVAILABLE and self.config:
-            level_prompt = self.config.LEVEL_PROMPTS.get(level, "")
-            if level_prompt:
-                # LEVEL_PROMPTS에서 해당 레벨의 설명 추출
-                if level <= 2:
-                    st.info("💡 초보 투자자를 위한 안내: 이 종목은 안정적이고 이해하기 쉬운 투자 대상입니다.")
-                elif level == 3:
-                    st.info("💡 중급 투자자를 위한 안내: 이 종목은 균형잡힌 위험-수익 프로필을 제공합니다.")
-                else:
-                    st.info("💡 고급 투자자를 위한 안내: 이 종목은 전문적인 투자 전략에 활용할 수 있습니다.")
+        # 레벨별 설명 (간소화)
+        if level <= 2:
+            st.info("💡 초보 투자자를 위한 안내: 이 종목은 안정적이고 이해하기 쉬운 투자 대상입니다.")
+        elif level == 3:
+            st.info("💡 중급 투자자를 위한 안내: 이 종목은 균형잡힌 위험-수익 프로필을 제공합니다.")
         else:
-            # fallback
-            if level <= 2:
-                st.info("💡 초보 투자자를 위한 안내: 이 종목은 안정적이고 이해하기 쉬운 투자 대상입니다.")
-            elif level == 3:
-                st.info("💡 중급 투자자를 위한 안내: 이 종목은 균형잡힌 위험-수익 프로필을 제공합니다.")
-            else:
-                st.info("💡 고급 투자자를 위한 안내: 이 종목은 전문적인 투자 전략에 활용할 수 있습니다.")
+            st.info("💡 고급 투자자를 위한 안내: 이 종목은 전문적인 투자 전략에 활용할 수 있습니다.")
+        
+        st.write("---")  # 구분선 추가
     
     def _get_realtime_stock_data(self, stock_code: str) -> Dict:
         """실시간 주식 데이터 가져오기"""

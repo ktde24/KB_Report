@@ -178,8 +178,6 @@ python run_app.py
 - 감정분석 결과 시각화
 - 관련성 필터링 강화 (관련 없는 뉴스 자동 제거)
 - 해외 종목 매핑 개선 (NVDA, AMD, INTC 등)
-- 제외 키워드 시스템 ("연체금", "신용사면" 등)
-- 헤드라인 표시 개선
 ```
 
 ### 5. GPT Client (`chatbot/gpt_client.py`)

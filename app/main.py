@@ -349,7 +349,7 @@ class DailyReportApp:
         """메인 애플리케이션 실행"""
         # 페이지 설정
         st.set_page_config(
-            page_title="📊 KB 맞춤형 투자 분석",
+            page_title="Just Fit It",
             page_icon="📊",
             layout="wide",
             initial_sidebar_state="expanded"
@@ -489,7 +489,7 @@ class DailyReportApp:
             # 초기 화면
             st.markdown("""
             <div class="welcome-section">
-                <h1>📊 KB 맞춤형 투자 분석</h1>
+                <h1>Just Fit It</h1>
                 <p style="font-size: 1.1rem; margin: 1rem 0;">
                     왼쪽 사이드바에서 투자자 프로필을 설정하고 리포트 생성 버튼을 클릭하세요!
                 </p>

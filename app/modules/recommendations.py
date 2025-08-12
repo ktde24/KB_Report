@@ -110,7 +110,9 @@ class Recommendations:
                                 'volume': realtime_data.get('volume', 0),
                                 'return_1y': rec.get('1년수익률', rec.get('return_1y', 0)),
                                 'return_3y': rec.get('3년수익률', rec.get('return_3y', 0)),
-                                'reasons': self._generate_recommendation_reasons(rec, level, wmti_type)
+                                'reasons': self._generate_recommendation_reasons(rec, level, wmti_type),
+                                'classification': rec.get('분류체계', ''),
+                                'reference_index': rec.get('기초지수', '')
                             }
                             self._display_recommendation_card(card_data, level, i, mpti_type)
                     
@@ -123,23 +125,21 @@ class Recommendations:
                         if api_key:
                             client = openai.OpenAI(api_key=api_key)
                             
-                            # 프롬프트 생성
-                            prompt = recommendation_engine.generate_recommendation_explanation(
-                                recommendations=recommendations[:3],  # Top3만 사용
-                                user_profile=user_profile,
-                                category_keyword="",
-                                context_docs=None
+                            # 구체적인 추천 근거 프롬프트 생성
+                            prompt = self._generate_detailed_recommendation_prompt(
+                                recommendations=recommendations[:3],
+                                user_profile=user_profile
                             )
                             
                             # GPT API 호출
                             response = client.chat.completions.create(
                                 model="gpt-3.5-turbo",
                                 messages=[
-                                    {"role": "system", "content": "당신은 KB 투자 전문 상담사입니다. 사용자에게 친근하고 이해하기 쉬운 투자 조언을 제공하세요."},
+                                    {"role": "system", "content": "당신은 투자 전문 상담사입니다. 제공된 ETF 데이터를 기반으로 구체적이고 실용적인 투자 조언을 제공하세요. 추상적이고 일반적인 설명은 피하고, 실제 데이터와 수치를 활용한 구체적인 분석을 제공하세요."},
                                     {"role": "user", "content": prompt}
                                 ],
-                                max_tokens=800,
-                                temperature=0.3
+                                max_tokens=1000,
+                                temperature=0.2
                             )
                             
                             explanation = response.choices[0].message.content.strip()
@@ -344,6 +344,12 @@ class Recommendations:
             else:
                 st.metric("거래량", self._format_volume(rec['volume']))
         
+        # 추가 정보 표시
+        if 'classification' in rec and rec['classification']:
+            st.markdown(f"**분류체계:** {rec['classification']}")
+        if 'reference_index' in rec and rec['reference_index']:
+            st.markdown(f"**기초지수:** {rec['reference_index']}")
+        
         # 추천 이유 표시 (일관된 형식)
         if 'reasons' in rec and rec['reasons']:
             st.markdown("**추천 이유:**")
@@ -446,6 +452,121 @@ class Recommendations:
             logger.error(f"캐시 데이터 조회 실패 ({stock_code}): {e}")
             return {'current_price': 0, 'volume': 0}
     
+    def _generate_detailed_recommendation_prompt(self, recommendations: List[Dict], user_profile: Dict) -> str:
+        """구체적인 추천 근거 프롬프트 생성"""
+        level = user_profile.get('level', 1)
+        wmti_type = user_profile.get('wmti_type', 'APWC')
+        mpti_type = user_profile.get('mpti_type', 'Fact')
+        
+        # ETF 정보 상세 포맷팅
+        etf_details = []
+        for i, rec in enumerate(recommendations, 1):
+            etf_name = rec.get('종목명', rec.get('ETF명', 'N/A'))
+            stock_code = rec.get('종목코드', 'N/A')
+            final_score = rec.get('final_score', 0)
+            return_score = rec.get('return_score', 0)
+            risk_adjusted_score = rec.get('risk_adjusted_score', 0)
+            cost_efficiency_score = rec.get('cost_efficiency_score', 0)
+            risk_tier = rec.get('risk_tier', 0)
+            classification = rec.get('분류체계', 'N/A')
+            reference_index = rec.get('기초지수', 'N/A')
+            fee = rec.get('총보수', 0)
+            return_1y = rec.get('1년수익률', 0)
+            return_3y = rec.get('3년수익률', 0)
+            volatility = rec.get('변동성', '보통')
+            
+            etf_details.append(f"""
+{i}위: {etf_name} ({stock_code})
+- 종합점수: {final_score:.3f} (수익률:{return_score:.3f}, 위험조정:{risk_adjusted_score:.3f}, 비용효율:{cost_efficiency_score:.3f})
+- 위험등급: Tier {risk_tier} (변동성: {volatility})
+- 분류체계: {classification}
+- 기초지수: {reference_index}
+- 총보수: {fee:.2f}% (1년수익률: {return_1y:.2f}%, 3년수익률: {return_3y:.2f}%)
+""")
+        
+        etf_info_text = "\n".join(etf_details)
+        
+        # WMTI 유형별 설명
+        wmti_descriptions = {
+            'APWC': '적극적 단기 투자자 (높은 수익 추구, 단기 보유)',
+            'APMC': '적극적 중단기 투자자 (높은 수익 추구, 중단기 보유)',
+            'APWL': '적극적 장기 투자자 (높은 수익 추구, 장기 보유)',
+            'APML': '적극적 중장기 투자자 (높은 수익 추구, 중장기 보유)',
+            'ABWC': '균형적 단기 투자자 (안정적 수익 추구, 단기 보유)',
+            'ABMC': '균형적 중단기 투자자 (안정적 수익 추구, 중단기 보유)',
+            'ABWL': '균형적 장기 투자자 (안정적 수익 추구, 장기 보유)',
+            'ABML': '균형적 중장기 투자자 (안정적 수익 추구, 중장기 보유)'
+        }
+        
+        wmti_desc = wmti_descriptions.get(wmti_type, f'WMTI {wmti_type} 유형')
+        
+        # 레벨별 설명 스타일
+        level_styles = {
+            1: "유치원/초등학생도 이해할 수 있는 아주 쉬운 말로 설명",
+            2: "중고등학생도 이해 가능한 쉬운 말로 설명", 
+            3: "일반 성인도 이해할 수 있는 수준으로 설명",
+            4: "투자 경험이 있는 성인을 대상으로 한 전문적 설명",
+            5: "투자 전문가 수준의 고급 분석과 전문 용어 사용"
+        }
+        
+        level_style = level_styles.get(level, level_styles[3])
+        
+        prompt = f"""
+당신은 Just Fit It의 투자 전문 상담사입니다. 다음 ETF 추천 목록에 대해 구체적이고 실용적인 투자 조언을 제공해주세요.
+
+**사용자 프로필:**
+- 투자 레벨: Level {level} ({level_style})
+- WMTI 유형: {wmti_type} ({wmti_desc})
+- MPTI 스타일: {mpti_type}
+
+**추천 ETF 목록:**
+{etf_info_text}
+
+**요청사항:**
+위 ETF들에 대해 다음을 포함하여 구체적이고 실용적인 분석을 제공해주세요:
+
+1. **각 ETF의 구체적인 특징과 투자 가치:**
+   - ETF명과 기초지수를 명확히 언급
+   - 분류체계에 따른 실제 투자 대상 설명
+   - 제공된 수치(수익률, 위험도, 비용)를 활용한 구체적 분석
+   - 다른 유사 ETF와의 차별점
+
+2. **WMTI 유형에 맞는 구체적인 추천 이유:**
+   - {wmti_type} 투자자에게 왜 이 ETF가 적합한지 구체적 설명
+   - 투자 성향과 ETF 특성의 연관성
+   - 예상 투자 기간과 전략
+
+3. **실제 투자 시 고려사항:**
+   - 해당 ETF의 실제 위험 요소 (기초지수, 분류체계 기반)
+   - 현재 시장 상황에서의 투자 시점 조언
+   - 포트폴리오 내 비중 설정 가이드
+
+4. **Level {level} 투자자를 위한 실전 팁:**
+   - 레벨에 맞는 구체적인 투자 전략
+   - 모니터링 방법과 리밸런싱 시점
+   - 손실 관리 방법
+
+5. **분류체계와 기초지수 기반 분석:**
+   - 기초지수의 실제 의미와 시장 포지셔닝
+   - 분류체계에 따른 시장 섹터 분석
+   - 글로벌/국내 시장 연관성
+
+**중요:** 
+- 추상적이고 일반적인 설명은 피하세요
+- 제공된 모든 수치와 데이터를 활용하세요
+- 구체적인 투자 전략과 실행 방법을 제시하세요
+- 사용자 레벨에 맞는 설명 스타일을 유지하세요
+- 실제 투자자가 바로 활용할 수 있는 실용적인 조언을 제공하세요
+
+**응답 형식:**
+- 각 ETF별로 구체적인 분석
+- WMTI 유형별 맞춤 전략
+- 실전 투자 가이드
+- 주의사항과 리스크 관리
+"""
+        
+        return prompt
+
     def _format_volume(self, value):
         """거래량 포맷팅"""
         if pd.isna(value) or value == 0:
